@@ -7,17 +7,19 @@ import "../common/interfaces/ILandToken.sol";
 import "../Game/GameBaseToken.sol";
 import "../common/interfaces/IERC721MandatoryTokenReceiver.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "../common/Libraries/UintToUintMap.sol";
+import "../libraries/UintToUintMap.sol";
+import "../common/BaseWithStorage/WithMinter.sol";
+import "@openzeppelin/contracts-0.8/utils/structs/EnumerableSet.sol";
 
 /// @dev An updated Estate Token contract using a simplified verison of LAND with no Quads
 
-contract EstateBaseToken is ImmutableERC721, Initializable {
+contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
     using EnumerableMap for EnumerableMap.UintToUintMap;
+    using EnumerableSet for EnumerableSet.UintSet;
     uint8 internal constant OWNER = 0;
     uint8 internal constant ADD = 1;
     uint8 internal constant BREAK = 2;
     uint8 internal constant WITHDRAWAL = 3;
-
     uint16 internal constant GRID_SIZE = 408;
 
     uint64 internal _nextId; // max uint64 = 18,446,744,073,709,551,615
@@ -26,18 +28,16 @@ contract EstateBaseToken is ImmutableERC721, Initializable {
     // EnumerableMap.UintToUintMap keys = land ids
     // EnumerableMap.UintToUintMap values = game ids
     mapping(uint256 => EnumerableMap.UintToUintMap) internal estates;
-
+    // gamesToLands key = gameId, value = landIds
+    mapping(uint256 => EnumerableSet.UintSet) internal gamesToLands;
     LandToken internal _land;
     GameBaseToken internal _gameToken;
-    address internal _minter;
 
     /// @param landIds LAND tokenIds added, Games added, Games removed, uri
-    /// @param junctions
     /// @param gameId Games added
     /// @param uri ipfs hash (without the prefix, assume cidv1 folder)
     struct EstateCRUDData {
         uint256[] landIds;
-        uint256[] junctions;
         uint256[] gameIds;
         bytes32 uri;
     }
@@ -57,14 +57,12 @@ contract EstateBaseToken is ImmutableERC721, Initializable {
         uint8 chainIndex
     ) public initializer() {
         _land = land;
-        ImmutableERC721.__ImmutableERC721_initialize(chainIndex);
+        ERC721BaseToken.__ERC721BaseToken_initialize(chainIndex);
         ERC2771Handler.__ERC2771Handler_initialize(trustedForwarder);
     }
 
-    //uint256[] landIds;
-    //uint256[] junctions;
-    //uint256[] gameIds;
-    //bytes32 uri;
+    // todo : restrict only for lands in size =1
+    // todo: verify access control for all functions
 
     // @todo Add access-control: minter-only? could inherit WithMinter.sol
     /// @notice Create a new estate token with adjacent lands.
@@ -79,19 +77,18 @@ contract EstateBaseToken is ImmutableERC721, Initializable {
         _check_authorized(from, ADD);
         (uint256 estateId, uint256 storageId) = _mintEstate(from, to, _nextId++, 1, true);
         _metaData[storageId] = creation.uri;
-        _addLandsGames(from, storageId, creation.landIds, creation.gameIds, creation.junctions, true);
+        _addLandGames(from, storageId, creation.landIds, creation.gameIds, true);
         emit EstateTokenUpdated(0, estateId, creation);
         return estateId;
     }
 
-    /// @notice Update an existing ESTATE token.This actually burns old token
-    /// and mints new token with same basId & incremented version.
+    /// @notice lets the estate owner to add lands and/or add/remove games for these lands
     /// @param from The one updating the ESTATE token.
     /// @param to The address to transfer removed GAMES to.
     /// @param estateId The current id of the ESTATE token.
     /// @param update The data to use for the Estate update.
     /// @return The new estateId.
-    function updateEstate(
+    function addLandsToEstate(
         address from,
         address to,
         uint256 estateId,
@@ -100,10 +97,8 @@ contract EstateBaseToken is ImmutableERC721, Initializable {
         _check_hasOwnerRights(from, estateId);
         uint256 storageId = _storageId(estateId);
         _metaData[storageId] = update.uri;
-        if (update.landIds.length != 0) {
-            _check_authorized(from, ADD);
-        }
-        _addLandsGames(from, storageId, update.landIds, update.gameIds, update.junctions, false);
+        _check_authorized(from, ADD);
+        _addLandGames(from, storageId, update.landIds, update.gameIds, false);
         uint256 newId = _incrementTokenVersion(from, estateId);
         emit EstateTokenUpdated(estateId, newId, update);
         return newId;
@@ -116,19 +111,33 @@ contract EstateBaseToken is ImmutableERC721, Initializable {
     /// @param estateId The estate token to remove lands from.
     /// @param rebuild The data to use when reconstructing the Estate.
     /// @dev Note that a valid estate can only contain adjacent lands, so it is possible to attempt to remove lands in a way that would result in an invalid estate, which must be prevented.
-    function downsizeEstate(
+    function removeLandsFromEstate(
         address from,
         uint256 estateId,
         EstateCRUDData memory rebuild
     ) external returns (uint256) {
         _check_hasOwnerRights(from, estateId);
-        _check_authorized(from, BREAK);
         _check_authorized(from, ADD);
         uint256 storageId = _storageId(estateId);
-        // @todo ensure resultant estate's lands are still adjacent
         _removeLandsGames(from, storageId, rebuild.landIds);
         uint256 newId = _incrementTokenVersion(from, estateId);
         emit EstateTokenUpdated(estateId, newId, rebuild);
+        return newId;
+    }
+
+    function setGamesOfLands(
+        address from,
+        address to,
+        uint256 estateId,
+        EstateCRUDData memory update
+    ) external returns (uint256) {
+        _check_hasOwnerRights(from, estateId);
+        uint256 storageId = _storageId(estateId);
+        _metaData[storageId] = update.uri;
+        _check_authorized(from, ADD);
+        _upsertGames(from, update.landIds, update.gameIds, storageId);
+        uint256 newId = _incrementTokenVersion(from, estateId);
+        emit EstateTokenUpdated(estateId, newId, update);
         return newId;
     }
 
@@ -195,7 +204,7 @@ contract EstateBaseToken is ImmutableERC721, Initializable {
         transferFromBurnedEstate(sender, to, estateId, landsToRemove);
     }
 
-    function getEstateData(uint256 estateId) external view returns (EstateData memory) {
+    function getEstateData(uint256 estateId) public view returns (EstateData memory) {
         uint256 storageId = _storageId(estateId);
         uint256 length = estates[storageId].length();
         uint256[] memory landIds = new uint256[](length);
@@ -207,6 +216,27 @@ contract EstateBaseToken is ImmutableERC721, Initializable {
             gameIds[i] = gameId;
         }
         return EstateData({landIds: landIds, gameIds: gameIds});
+    }
+
+    function areLandsAdjacent(uint256[] memory landIds, uint256 landIdsSize) public view returns (bool) {
+        uint256[] memory visitedLands = new uint256[](landIds.length);
+        uint256[] memory stack = new uint256[](landIds.length);
+        uint256 stackSize;
+        uint256 visitedLandsSize;
+        stack[stackSize] = landIds[stackSize];
+        stackSize++;
+
+        while (stackSize > 0) {
+            uint256 landId = stack[stackSize - 1];
+            stack[stackSize - 1] = 0;
+            stackSize--;
+            uint16 x = uint16(landId % GRID_SIZE);
+            uint16 y = uint16(landId / GRID_SIZE);
+            stackSize = _addUnvisitedAdjacentLands(x, y, landIds, visitedLands, stack, stackSize);
+            visitedLands[visitedLandsSize] = landId;
+            visitedLandsSize++;
+        }
+        return landIdsSize == visitedLandsSize;
     }
 
     /// @notice Return the name of the token contract.
@@ -232,56 +262,115 @@ contract EstateBaseToken is ImmutableERC721, Initializable {
 
     // //////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    function _addLandsGames(
+    function _addUnvisitedAdjacentLands(
+        uint16 x1,
+        uint16 y1,
+        uint256[] memory landIds,
+        uint256[] memory visitedLands,
+        uint256[] memory stack,
+        uint256 stackSize
+    ) internal pure returns (uint256) {
+        // maximum of 4 adjacent lands is possible
+        for (uint256 i = 0; i < landIds.length; i++) {
+            if (landIds[i] == 0) {
+                continue;
+            }
+            uint16 x2 = uint16(landIds[i] % GRID_SIZE);
+            uint16 y2 = uint16(landIds[i] / GRID_SIZE);
+            if (_areAdjacent(x1, y1, x2, y2) && !isLandVisited(landIds[i], visitedLands)) {
+                stack[stackSize] = landIds[i];
+                stackSize++;
+            }
+        }
+        return stackSize;
+    }
+
+    function isLandVisited(uint256 landId, uint256[] memory visitedLands) internal pure returns (bool) {
+        for (uint256 i = 0; i < visitedLands.length; i++) {
+            if (visitedLands[i] == landId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function _addLandGames(
         address sender,
         uint256 storageId,
-        uint256[] memory landIds,
+        uint256[] memory landIdsToAdd,
         uint256[] memory gameIds,
-        uint256[] memory junctions,
         bool justCreated
     ) internal {
+        // land ids are in the event emitted
         // lands without games will be represented as gameId = 0
-        require(landIds.length == gameIds.length);
-        uint24[] memory list = new uint24[](landIds.length);
-        for (uint256 i = 0; i < list.length; i++) {
-            uint16 x = uint16(landIds[i] % GRID_SIZE);
-            uint16 y = uint16(landIds[i] / GRID_SIZE);
-            list[i] = _encode(x, y, 1);
-        }
-        // solhint-disable-next-line use-forbidden-name
-        uint256 l = estates[storageId].length();
-        uint16 lastX = 409;
-        uint16 lastY = 409;
-        if (!justCreated) {
-            // uint24 d = estates[storageId].landIds[l - 1];
-            // lastX = uint16(d % GRID_SIZE);
-            // lastY = uint16(d % GRID_SIZE);
-        }
-        uint256 j = 0;
-        for (uint256 i = 0; i < list.length; i++) {
-            uint16 x = uint16(landIds[i] % GRID_SIZE);
-            uint16 y = uint16(landIds[i] / GRID_SIZE);
-            if (lastX != 409 && !_adjacent(x, y, lastX, lastY)) {
-                uint256 index = junctions[j];
-                j++;
-                uint24 data;
-                if (index >= l) {
-                    require(index - l < j, "junctions need to refers to previously accepted land");
-                    data = list[index - l];
+        require(landIdsToAdd.length == gameIds.length, "DIFFERENT_LENGTH_LANDS_GAMES");
+        require(landIdsToAdd.length > 0, "EMPTY_LAND_IDS_ARRAY");
+        uint256[] memory newLands;
+        if (justCreated) {
+            newLands = landIdsToAdd;
+        } else {
+            EstateData memory ed = getEstateData(storageId);
+            newLands = new uint256[](landIdsToAdd.length + ed.landIds.length);
+            for (uint256 i = 0; i < newLands.length; i++) {
+                if (i < landIdsToAdd.length) {
+                    require(landIdsToAdd[i] != 0, "NO_ZERO_LAND_IDS");
+                    newLands[i] = landIdsToAdd[i];
                 } else {
-                    // data = estates[storageId].landIds[j];
-                }
-                (uint16 jx, uint16 jy, uint8 jsize) = _decode(data);
-                if (jsize == 1) {
-                    require(_adjacent(x, y, jx, jy), "need junctions to be adjacent");
-                } else {
-                    require(_adjacent(x, y, jx, jy, jsize), "need junctions to be adjacent");
+                    require(ed.landIds[i - landIdsToAdd.length] != 0, "NO_ZERO_LAND_IDS");
+                    newLands[i] = ed.landIds[i - landIdsToAdd.length];
                 }
             }
-            lastX = x;
-            lastY = y;
         }
-        _upsertLandsGames(sender, landIds, gameIds, storageId);
+        require(areLandsAdjacent(newLands, newLands.length), "LANDS_ARE_NOT_ADJACENT");
+
+        uint256[] memory gamesToAdd = new uint256[](gameIds.length);
+        for (uint256 i = 0; i < landIdsToAdd.length; i++) {
+            estates[storageId].set(landIdsToAdd[i], gameIds[i]);
+            if (gameIds[i] != 0) {
+                gamesToAdd[i] = gameIds[i];
+                gamesToLands[gameIds[i]].add(landIdsToAdd[i]);
+            }
+        }
+        if (landIdsToAdd.length > 0) {
+            _land.batchTransferFrom(sender, address(this), landIdsToAdd, "");
+        }
+        if (gamesToAdd.length > 0) {
+            _gameToken.batchTransferFrom(sender, address(this), gamesToAdd, "");
+        }
+    }
+
+    function _removeLandsGames(
+        address to,
+        uint256 storageId,
+        uint256[] memory landsToRemove
+    ) internal {
+        EstateData memory ed = getEstateData(storageId);
+        uint256 removedLandsCounter;
+        for (uint256 k = 0; k < ed.landIds.length; k++) {
+            for (uint256 l = 0; l < landsToRemove.length; l++) {
+                if (ed.landIds[k] == landsToRemove[l]) {
+                    ed.landIds[k] = 0;
+                    removedLandsCounter++;
+                }
+            }
+        }
+        require(areLandsAdjacent(ed.landIds, ed.landIds.length - removedLandsCounter), "LANDS_ARE_NOT_ADJACENT");
+        uint256 length = landsToRemove.length;
+        uint256[] memory gameIdsToRemove = new uint256[](length);
+        for (uint256 i = 0; i < length; i++) {
+            uint256 gameId = estates[storageId].get(landsToRemove[i]);
+            if (gameId != 0) {
+                gameIdsToRemove[i] = gameId;
+                gamesToLands[gameId].remove(landsToRemove[i]);
+            }
+            require(estates[storageId].remove(landsToRemove[i]), "LAND_NOT_EXIST");
+        }
+        // a game should be removed only if all lands that attached to it are being removed too
+        for (uint256 j = 0; j < gameIdsToRemove.length; j++) {
+            require(gamesToLands[gameIdsToRemove[j]].length() == 0);
+        }
+        _land.batchTransferFrom(address(this), to, landsToRemove, "");
+        _gameToken.batchTransferFrom(address(this), to, gameIdsToRemove, "");
     }
 
     function _upsertLandsGames(
@@ -290,39 +379,48 @@ contract EstateBaseToken is ImmutableERC721, Initializable {
         uint256[] memory gameIds,
         uint256 storageId
     ) internal {
+        uint256[] memory gamesToAdd = new uint256[](gameIds.length);
+        for (uint256 i = 0; i < landIds.length; i++) {
+            estates[storageId].set(landIds[i], gameIds[i]);
+            if (gameIds[i] != 0) {
+                gamesToAdd[i] = gameIds[i];
+                gamesToLands[gameIds[i]].add(landIds[i]);
+            }
+        }
+        if (landIds.length > 0) {
+            _land.batchTransferFrom(sender, address(this), landIds, "");
+        }
+        if (gamesToAdd.length > 0) {
+            _gameToken.batchTransferFrom(sender, address(this), gamesToAdd, "");
+        }
+    }
+
+    function _upsertGames(
+        address sender,
+        uint256[] memory landIds,
+        uint256[] memory gameIds,
+        uint256 storageId
+    ) internal {
         uint256[] memory gamesToRemove = new uint256[](gameIds.length);
         uint256[] memory gamesToAdd = new uint256[](gameIds.length);
         for (uint256 i = 0; i < landIds.length; i++) {
-            (, uint256 oldGameId) = estates[storageId].tryGet(landIds[i]);
+            // revert if land does not exist
+            uint256 oldGameId = estates[storageId].get(landIds[i]);
             estates[storageId].set(landIds[i], gameIds[i]);
             if (oldGameId != 0) {
                 gamesToRemove[i] = oldGameId;
             }
             if (gameIds[i] != 0) {
                 gamesToAdd[i] = gameIds[i];
+                gamesToLands[gameIds[i]].add(landIds[i]);
             }
         }
-        _land.batchTransferFrom(sender, address(this), landIds, "");
-        _gameToken.batchTransferFrom(sender, address(this), gamesToAdd, "");
-        _gameToken.batchTransferFrom(address(this), sender, gamesToRemove, "");
-    }
-
-    function _removeLandsGames(
-        address to,
-        uint256 storageId,
-        uint256[] memory landsToRemove
-    ) internal {
-        uint256 length = landsToRemove.length;
-        uint256[] memory gameIdsToRemove = new uint256[](length);
-        for (uint256 i = 0; i < length; i++) {
-            uint256 gameId = estates[storageId].get(landsToRemove[i]);
-            if (gameId != 0) {
-                gameIdsToRemove[i] = gameId;
-            }
-            require(estates[storageId].remove(landsToRemove[i]));
+        if (gamesToAdd.length > 0) {
+            _gameToken.batchTransferFrom(sender, address(this), gamesToAdd, "");
         }
-        _land.batchTransferFrom(address(this), to, landsToRemove, "");
-        _gameToken.batchTransferFrom(address(this), to, gameIdsToRemove, "");
+        if (gamesToRemove.length > 0) {
+            _gameToken.batchTransferFrom(address(this), sender, gamesToRemove, "");
+        }
     }
 
     /// @dev used to increment the version in a tokenId by burning the original and reminting a new token. Mappings to token-specific data are preserved via the storageId mechanism.
@@ -349,11 +447,7 @@ contract EstateBaseToken is ImmutableERC721, Initializable {
         address msgSender = _msgSender();
         if (action == ADD) {
             address minter = _minter;
-            if (minter == address(uint160(0))) {
-                require(msgSender == sender, "not _check_authorized");
-            } else {
-                require(msgSender == minter, "only minter allowed");
-            }
+            require(msgSender == minter || msgSender == sender, "UNAUTHORIZED_ADD");
         } else {
             require(msgSender == sender, "not _check_authorized");
         }
@@ -431,7 +525,7 @@ contract EstateBaseToken is ImmutableERC721, Initializable {
         return (estateId, strgId);
     }
 
-    function _adjacent(
+    function _areAdjacent(
         uint16 x1,
         uint16 y1,
         uint16 x2,
@@ -441,19 +535,6 @@ contract EstateBaseToken is ImmutableERC721, Initializable {
             (x1 == x2 && y1 == y2 + 1) ||
             (x1 == x2 - 1 && y1 == y2) ||
             (x1 == x2 + 1 && y1 == y2));
-    }
-
-    function _adjacent(
-        uint16 x1,
-        uint16 y1,
-        uint16 x2,
-        uint16 y2,
-        uint8 s2
-    ) internal pure returns (bool) {
-        return ((x1 >= x2 && x1 < x2 + s2 && y1 == y2 - 1) ||
-            (x1 >= x2 && x1 < x2 + s2 && y1 == y2 + s2) ||
-            (x1 == x2 - 1 && y1 >= y2 && y1 < y2 + s2) ||
-            (x1 == x2 - s2 && y1 >= y2 && y1 < y2 + s2));
     }
 
     // ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

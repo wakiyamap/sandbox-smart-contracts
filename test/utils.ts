@@ -161,3 +161,11 @@ export function getAssetChainIndex(id: BigNumber): number {
   const SLICED_CHAIN_INDEX_MASK = Number('0x7F800000');
   return (slicedId & SLICED_CHAIN_INDEX_MASK) >>> 23;
 }
+
+export function getImmutableChainIndex(id: BigNumber): number {
+  // js bitwise & operands are converted to 32-bit integers
+  const idAsHexString = utils.hexValue(id);
+  const SLICED_CHAIN_INDEX_MASK = Number('0x00ff0000');
+  const slicedId = Number('0x' + idAsHexString.slice(58));
+  return (slicedId & SLICED_CHAIN_INDEX_MASK) >> 16;
+}
