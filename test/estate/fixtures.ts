@@ -9,7 +9,7 @@ export const setupEstate = deployments.createFixture(async function () {
   const user0 = others[0];
   const user1 = others[2];
   const estateContract = await ethers.getContract('ChildEstateToken', minter);
-  const landContract = await ethers.getContract('ChildLandToken');
+  const landContract = await ethers.getContract('Land');
   const landAdmin = await landContract.callStatic.getAdmin();
   const landContractAsMinter = await landContract.connect(
     ethers.provider.getSigner(minter)
