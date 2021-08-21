@@ -300,8 +300,12 @@ contract ERC721BaseToken is IERC721, WithSuperOperators, ERC2771Handler {
         require(to != address(0), "NOT_TO_ZEROADDRESS");
 
         uint256 numTokens = ids.length;
-        for (uint256 i = 0; i < numTokens; i++) {
+        for (uint256 i = 0; i < ids.length; i++) {
             uint256 id = ids[i];
+            if (id == 0) {
+                numTokens--;
+                continue;
+            }
             (address owner, bool operatorEnabled) = _ownerAndOperatorEnabledOf(id);
             // @todo verify why this line exists
             // require(owner == from, "BATCHTRANSFERFROM_NOT_OWNER");

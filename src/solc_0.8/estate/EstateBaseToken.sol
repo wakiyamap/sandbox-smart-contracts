@@ -220,6 +220,9 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
     }
 
     function areLandsAdjacent(uint256[] memory landIds, uint256 landIdsSize) public view returns (bool) {
+        if (landIdsSize == 0) {
+            return true;
+        }
         uint256[] memory visitedLands = new uint256[](landIds.length);
         uint256[] memory stack = new uint256[](landIds.length);
         uint256 stackSize;
@@ -295,6 +298,7 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         return false;
     }
 
+    // if the same game is used for many lands, it will be duplicated and the landIds will be ordered by the game id, otherwise it will revert.
     function _addLandsGames(
         address sender,
         uint256 estateId,
@@ -329,11 +333,14 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         uint256 gamesToAddSize = 0;
         for (uint256 i = 0; i < landIdsToAdd.length; i++) {
             estates[storageId].set(landIdsToAdd[i], gameIds[i]);
-            if (gameIds[i] != 0) {
+            // skip gameId=0 and duplicate games
+            if (gameIds[i] == 0) {
+                continue;
+            } else if (i == 0 || gameIds[i] != gameIds[i - 1]) {
                 gamesToAdd[i] = gameIds[i];
                 gamesToAddSize++;
-                gamesToLands[gameIds[i]].add(landIdsToAdd[i]);
             }
+            gamesToLands[gameIds[i]].add(landIdsToAdd[i]);
         }
         _land.batchTransferFrom(sender, address(this), landIdsToAdd, "");
         if (gamesToAddSize > 0) {
@@ -360,20 +367,33 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         require(areLandsAdjacent(ed.landIds, ed.landIds.length - removedLandsCounter), "LANDS_ARE_NOT_ADJACENT");
         uint256 length = landsToRemove.length;
         uint256[] memory gameIdsToRemove = new uint256[](length);
+        uint256 gameIdsToRemoveSize;
+        uint256 prevGameId;
         for (uint256 i = 0; i < length; i++) {
             uint256 gameId = estates[storageId].get(landsToRemove[i]);
+            require(estates[storageId].remove(landsToRemove[i]), "LAND_DOES_NOT_EXIST");
+            // skip gameId=0 and duplicate games
             if (gameId != 0) {
-                gameIdsToRemove[i] = gameId;
                 gamesToLands[gameId].remove(landsToRemove[i]);
+                if (i > 0) {
+                    if (gameId == prevGameId) {
+                        prevGameId = gameId;
+                        continue;
+                    }
+                }
+                gameIdsToRemove[i] = gameId;
+                gameIdsToRemoveSize++;
             }
-            require(estates[storageId].remove(landsToRemove[i]), "LAND_NOT_EXIST");
+            prevGameId = gameId;
         }
         // a game should be removed only if all lands that attached to it are being removed too
         for (uint256 j = 0; j < gameIdsToRemove.length; j++) {
-            require(gamesToLands[gameIdsToRemove[j]].length() == 0);
+            require(gamesToLands[gameIdsToRemove[j]].length() == 0, "GAME_IS_ATTACHED_TO_OTHER_LANDS");
         }
         _land.batchTransferFrom(address(this), to, landsToRemove, "");
-        _gameToken.batchTransferFrom(address(this), to, gameIdsToRemove, "");
+        if (gameIdsToRemoveSize > 0) {
+            _gameToken.batchTransferFrom(address(this), to, gameIdsToRemove, "");
+        }
     }
 
     function _upsertLandsGames(
