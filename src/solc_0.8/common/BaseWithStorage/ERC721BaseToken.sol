@@ -303,7 +303,8 @@ contract ERC721BaseToken is IERC721, WithSuperOperators, ERC2771Handler {
         for (uint256 i = 0; i < numTokens; i++) {
             uint256 id = ids[i];
             (address owner, bool operatorEnabled) = _ownerAndOperatorEnabledOf(id);
-            require(owner == from, "BATCHTRANSFERFROM_NOT_OWNER");
+            // @todo verify why this line exists
+            // require(owner == from, "BATCHTRANSFERFROM_NOT_OWNER");
             require(authorized || (operatorEnabled && _operators[id] == msgSender), "NOT_AUTHORIZED");
             _updateOwnerData(id, _owners[_storageId(id)], to, false);
             emit Transfer(from, to, id);
@@ -312,7 +313,6 @@ contract ERC721BaseToken is IERC721, WithSuperOperators, ERC2771Handler {
             _numNFTPerAddress[from] -= numTokens;
             _numNFTPerAddress[to] += numTokens;
         }
-
         if (to.isContract() && (safe || _checkInterfaceWith10000Gas(to, ERC721_MANDATORY_RECEIVER))) {
             require(_checkOnERC721BatchReceived(msgSender, from, to, ids, data), "ERC721_BATCH_TRANSFER_REJECTED");
         }

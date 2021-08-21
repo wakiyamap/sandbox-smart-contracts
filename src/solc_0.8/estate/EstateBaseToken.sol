@@ -55,8 +55,10 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
     function initV1(
         address trustedForwarder,
         LandToken land,
+        GameBaseToken gameToken,
         uint8 chainIndex
     ) public initializer() {
+        _gameToken = gameToken;
         _land = land;
         ERC721BaseToken.__ERC721BaseToken_initialize(chainIndex);
         ERC2771Handler.__ERC2771Handler_initialize(trustedForwarder);
@@ -78,7 +80,7 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         _check_authorized(from, ADD);
         (uint256 estateId, uint256 storageId) = _mintEstate(from, to, _nextId++, 1, true);
         _metaData[storageId] = creation.uri;
-        _addLandGames(from, storageId, creation.landIds, creation.gameIds, true);
+        _addLandsGames(from, storageId, creation.landIds, creation.gameIds, true);
         emit EstateTokenUpdated(0, estateId, creation);
         return estateId;
     }
@@ -99,7 +101,7 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         uint256 storageId = _storageId(estateId);
         _metaData[storageId] = update.uri;
         _check_authorized(from, ADD);
-        _addLandGames(from, storageId, update.landIds, update.gameIds, false);
+        _addLandsGames(from, estateId, update.landIds, update.gameIds, false);
         uint256 newId = _incrementTokenVersion(from, estateId);
         emit EstateTokenUpdated(estateId, newId, update);
         return newId;
@@ -119,8 +121,7 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
     ) external returns (uint256) {
         _check_hasOwnerRights(from, estateId);
         _check_authorized(from, ADD);
-        uint256 storageId = _storageId(estateId);
-        _removeLandsGames(from, storageId, rebuild.landIds);
+        _removeLandsGames(from, estateId, rebuild.landIds);
         uint256 newId = _incrementTokenVersion(from, estateId);
         emit EstateTokenUpdated(estateId, newId, rebuild);
         return newId;
@@ -189,9 +190,8 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         require(sender == _withdrawalOwnerOf(estateId), "NOT_WITHDRAWAL_OWNER");
         (address owner, ) = _ownerAndOperatorEnabledOf(estateId);
         // check that the estate has been burned
-        uint256 strgId = _storageId(estateId);
         require(owner == address(0));
-        _removeLandsGames(to, strgId, landsToRemove);
+        _removeLandsGames(to, estateId, landsToRemove);
     }
 
     function burnAndTransferFromDestroyedEstate(
@@ -295,9 +295,9 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         return false;
     }
 
-    function _addLandGames(
+    function _addLandsGames(
         address sender,
-        uint256 storageId,
+        uint256 estateId,
         uint256[] memory landIdsToAdd,
         uint256[] memory gameIds,
         bool justCreated
@@ -306,11 +306,12 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         // lands without games will be represented as gameId = 0
         require(landIdsToAdd.length == gameIds.length, "DIFFERENT_LENGTH_LANDS_GAMES");
         require(landIdsToAdd.length > 0, "EMPTY_LAND_IDS_ARRAY");
+        uint256 storageId = _storageId(estateId);
         uint256[] memory newLands;
         if (justCreated) {
             newLands = landIdsToAdd;
         } else {
-            EstateData memory ed = getEstateData(storageId);
+            EstateData memory ed = getEstateData(estateId);
             newLands = new uint256[](landIdsToAdd.length + ed.landIds.length);
             for (uint256 i = 0; i < newLands.length; i++) {
                 if (i < landIdsToAdd.length) {
@@ -325,26 +326,27 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         require(areLandsAdjacent(newLands, newLands.length), "LANDS_ARE_NOT_ADJACENT");
 
         uint256[] memory gamesToAdd = new uint256[](gameIds.length);
+        uint256 gamesToAddSize = 0;
         for (uint256 i = 0; i < landIdsToAdd.length; i++) {
             estates[storageId].set(landIdsToAdd[i], gameIds[i]);
             if (gameIds[i] != 0) {
                 gamesToAdd[i] = gameIds[i];
+                gamesToAddSize++;
                 gamesToLands[gameIds[i]].add(landIdsToAdd[i]);
             }
         }
-        if (landIdsToAdd.length > 0) {
-            _land.batchTransferFrom(sender, address(this), landIdsToAdd, "");
-        }
-        if (gamesToAdd.length > 0) {
+        _land.batchTransferFrom(sender, address(this), landIdsToAdd, "");
+        if (gamesToAddSize > 0) {
             _gameToken.batchTransferFrom(sender, address(this), gamesToAdd, "");
         }
     }
 
     function _removeLandsGames(
         address to,
-        uint256 storageId,
+        uint256 estateId,
         uint256[] memory landsToRemove
     ) internal {
+        uint256 storageId = _storageId(estateId);
         EstateData memory ed = getEstateData(storageId);
         uint256 removedLandsCounter;
         for (uint256 k = 0; k < ed.landIds.length; k++) {
@@ -439,7 +441,7 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         }
         (uint256 newId, ) = _mintEstate(originalCreator, owner, subId, version, false);
         address newOwner = _ownerOf(newId);
-        assert(owner == newOwner);
+        require(owner == newOwner, "NOT_OWNER");
         return newId;
     }
 
@@ -457,10 +459,10 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
     function _check_hasOwnerRights(address sender, uint256 estateId) internal view {
         (address owner, bool operatorEnabled) = _ownerAndOperatorEnabledOf(estateId);
         require(owner != address(uint160(0)), "token does not exist");
-        require(owner == sender, "not owner");
         address msgSender = _msgSender();
         require(
-            _superOperators[msgSender] ||
+            owner == sender ||
+                _superOperators[msgSender] ||
                 _operatorsForAll[sender][msgSender] ||
                 (operatorEnabled && _operators[estateId] == msgSender),
             "not approved"
@@ -516,7 +518,8 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
             strgId = _storageId(estateId);
             require(_owners[strgId] == 0, "STORAGE_ID_REUSE_FORBIDDEN");
         } else {
-            estateId = _generateTokenId(from, subId, _chainIndex, version);
+            idVersion = version;
+            estateId = _generateTokenId(from, subId, _chainIndex, idVersion);
             strgId = _storageId(estateId);
         }
 
