@@ -307,8 +307,7 @@ contract ERC721BaseToken is IERC721, WithSuperOperators, ERC2771Handler {
                 continue;
             }
             (address owner, bool operatorEnabled) = _ownerAndOperatorEnabledOf(id);
-            // @todo verify why this line exists
-            // require(owner == from, "BATCHTRANSFERFROM_NOT_OWNER");
+            require(owner == from, "BATCHTRANSFERFROM_NOT_OWNER");
             require(authorized || (operatorEnabled && _operators[id] == msgSender), "NOT_AUTHORIZED");
             _updateOwnerData(id, _owners[_storageId(id)], to, false);
             emit Transfer(from, to, id);
