@@ -158,13 +158,16 @@ describe('SandBaseToken.sol', function () {
         usersWithoutSand,
       } = await setupTest();
       const sandTransferValue = DECIMALS_18.mul(200);
-      sandBeneficiary.SandBaseToken.transfer(
-        usersWithoutSand,
+      await sandBeneficiary.SandBaseToken.transfer(
+        usersWithoutSand[0].address,
         sandTransferValue
       );
-      userWithSand.SandBaseToken.transfer(usersWithoutSand, sandTransferValue);
-      usersWithoutSand[0].SandBaseToken.transfer(
-        usersWithoutSand,
+      await userWithSand.SandBaseToken.transfer(
+        usersWithoutSand[0].address,
+        sandTransferValue
+      );
+      await usersWithoutSand[0].SandBaseToken.transfer(
+        usersWithoutSand[0].address,
         sandTransferValue
       );
       const totalSupply = await SandBaseToken.totalSupply();
@@ -266,6 +269,43 @@ describe('SandBaseToken.sol', function () {
       expect(senderAfter).to.equal(senderBefore.sub(TRANSFER));
       expect(receiverAfter).to.equal(receiverBefore.add(TRANSFER));
       expect(receiverAfter).to.equal(TRANSFER);
+    });
+
+    it('burn test', async function () {
+      const {SandBaseToken, userWithSand, usersWithoutSand} = await setupTest();
+      const TOTAL_ALLOWANCE = DECIMALS_18.mul(250);
+      const BURN = TOTAL_ALLOWANCE.sub(100);
+
+      const allowanceApprover = userWithSand;
+      const allowanceCarrier = usersWithoutSand[0];
+
+      allowanceApprover.SandBaseToken.approve(
+        allowanceCarrier.address,
+        TOTAL_ALLOWANCE
+      );
+
+      const senderBefore = await SandBaseToken.balanceOf(
+        allowanceApprover.address
+      );
+
+      const allowedBefore = await SandBaseToken.allowance(
+        allowanceApprover.address,
+        allowanceCarrier.address
+      );
+
+      allowanceCarrier.SandBaseToken.burnFor(allowanceApprover.address, BURN);
+
+      const senderAfter = await SandBaseToken.balanceOf(
+        allowanceApprover.address
+      );
+
+      const allowedAfter = await SandBaseToken.allowance(
+        allowanceApprover.address,
+        allowanceCarrier.address
+      );
+
+      expect(senderAfter).to.equal(senderBefore.sub(BURN));
+      expect(allowedBefore).to.equal(BURN.add(allowedAfter));
     });
   });
 });
