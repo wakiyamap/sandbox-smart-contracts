@@ -396,47 +396,36 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         }
     }
 
-    function _upsertLandsGames(
-        address sender,
-        uint256[] memory landIds,
-        uint256[] memory gameIds,
-        uint256 storageId
-    ) internal {
-        uint256[] memory gamesToAdd = new uint256[](gameIds.length);
-        for (uint256 i = 0; i < landIds.length; i++) {
-            estates[storageId].set(landIds[i], gameIds[i]);
-            if (gameIds[i] != 0) {
-                gamesToAdd[i] = gameIds[i];
-                gamesToLands[gameIds[i]].add(landIds[i]);
-            }
-        }
-        if (landIds.length > 0) {
-            _land.batchTransferFrom(sender, address(this), landIds, "");
-        }
-        if (gamesToAdd.length > 0) {
-            _gameToken.batchTransferFrom(sender, address(this), gamesToAdd, "");
-        }
-    }
-
     function _upsertGames(
         address sender,
         uint256[] memory landIds,
         uint256[] memory gameIds,
         uint256 storageId
     ) internal {
+        require(landIds.length == gameIds.length, "DIFFERENT_LENGTH_LANDS_GAMES");
+        require(landIds.length > 0, "EMPTY_LAND_IDS_ARRAY");
         uint256[] memory gamesToRemove = new uint256[](gameIds.length);
         uint256[] memory gamesToAdd = new uint256[](gameIds.length);
+        uint256 prevOldGame;
+        uint256 prevGame;
         for (uint256 i = 0; i < landIds.length; i++) {
+            uint256 gameId = gameIds[i];
             // revert if land does not exist
             uint256 oldGameId = estates[storageId].get(landIds[i]);
-            estates[storageId].set(landIds[i], gameIds[i]);
-            if (oldGameId != 0) {
+            estates[storageId].set(landIds[i], gameId);
+            // skip gameId=0 and games duplications
+            if (oldGameId != 0 && oldGameId != prevOldGame) {
                 gamesToRemove[i] = oldGameId;
             }
-            if (gameIds[i] != 0) {
-                gamesToAdd[i] = gameIds[i];
-                gamesToLands[gameIds[i]].add(landIds[i]);
+            // skip gameId=0 and games duplications
+            if (gameId != 0) {
+                if (oldGameId != prevOldGame) {
+                    gamesToAdd[i] = gameId;
+                }
+                gamesToLands[gameId].add(landIds[i]);
             }
+            prevOldGame = oldGameId;
+            prevGame = gameId;
         }
         if (gamesToAdd.length > 0) {
             _gameToken.batchTransferFrom(sender, address(this), gamesToAdd, "");
