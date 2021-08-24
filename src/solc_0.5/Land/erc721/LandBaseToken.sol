@@ -57,7 +57,7 @@ contract LandBaseToken is ERC721BaseToken {
     /// @notice x coordinate of Land token
     /// @param id tokenId
     /// @return the x coordinates
-    function x(uint256 id) external returns(uint256) {
+    function land_x(uint256 id) external returns(uint256) {
         require(_ownerOf(id) != address(0), "token does not exist");
         return id % GRID_SIZE;
     }
@@ -65,7 +65,7 @@ contract LandBaseToken is ERC721BaseToken {
     /// @notice y coordinate of Land token
     /// @param id tokenId
     /// @return the y coordinates
-    function y(uint256 id) external returns(uint256) {
+    function land_y(uint256 id) external returns(uint256) {
         require(_ownerOf(id) != address(0), "token does not exist");
         return id / GRID_SIZE;
     }
@@ -145,9 +145,9 @@ contract LandBaseToken is ERC721BaseToken {
         }
 
         for (uint256 i = 0; i < size*size; i++) {
-            uint256 id = _idInPath(i, size, x, y);
-            require(_owners[id] == 0, "Already minted");
-            emit Transfer(address(0), to, id);
+            uint256 mintId = _idInPath(i, size, x, y);
+            require(_owners[mintId] == 0, "Already minted");
+            emit Transfer(address(0), to, mintId);
         }
 
         _owners[quadId] = uint256(to);
