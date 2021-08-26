@@ -8,7 +8,6 @@ import {getNewGame} from './utils';
 import {Address} from 'hardhat-deploy/types';
 
 const emptyBytes = Buffer.from('');
-const GRID_SIZE = 408;
 
 type LandMintingData = {
   beneficiary: string;
@@ -62,9 +61,17 @@ async function mintGames(
   }
   return {gameIds, lastId: nextId + assets.length};
 }
-
-// @todo: verify why _batchTransferFrom is owner == from only
+// @todo: support attaching an existing game to new lands added
+// @todo: is transferFromBurnedEstate callable for a non existing token ?
+// @todo: test areLandsAdjacent more specifically
+// @todo: validate if burned status is validated in transfer, or it could be front-runned as well
+// @todo: validate if a burned estate can be recreated/addLands/removeLands/ etc ..
+// @todo: should we skip the check of GAME_IS_ATTACHED_TO_OTHER_LANDS ?
+// @todo: should we skip the check of GAME_IS_ATTACHED_TO_OTHER_LANDS for burned estate only ?
+// @todo : restrict the estate contract only for lands in size =1
+// @todo: verify access control for all functions
 describe('EstateV2', function () {
+  // createEstate
   it('create should fail on empty land array', async function () {
     const {estateContract, landContractAsMinter, user0} = await setupEstate();
     const size = 1;
@@ -84,7 +91,6 @@ describe('EstateV2', function () {
         })
     ).to.be.revertedWith(`EMPTY_LAND_IDS_ARRAY`);
   });
-
   it('create should fail on different sizes for land, game arrays', async function () {
     const {estateContract, landContractAsMinter, user0} = await setupEstate();
     const size = 1;
@@ -108,7 +114,6 @@ describe('EstateV2', function () {
         })
     ).to.be.revertedWith(`DIFFERENT_LENGTH_LANDS_GAMES`);
   });
-
   it('create an estate with a single land and game', async function () {
     const {
       estateContract,
@@ -152,7 +157,6 @@ describe('EstateV2', function () {
       expect(estateCreationEvent[0].args[2].uri).to.be.equal(uri);
     }
   });
-
   it('create an estate with two lands and games', async function () {
     const {
       estateContract,
@@ -204,7 +208,6 @@ describe('EstateV2', function () {
       expect(estateData.landIds).to.be.eql(landIds);
     }
   });
-
   it('create should fail for lands that are not adjacent', async function () {
     const {
       estateContract,
@@ -237,7 +240,7 @@ describe('EstateV2', function () {
         })
     ).to.be.revertedWith('LANDS_ARE_NOT_ADJACENT');
   });
-
+  // addLandsToEstate
   it('adding non-adjacent lands to an existing estate should fail', async function () {
     const {
       estateContract,
@@ -509,6 +512,7 @@ describe('EstateV2', function () {
       expect(newVersion).to.be.equal(oldVersion + 1);
     }
   });
+  // removeLandsFromEstate
   it('removing lands from an existing estate with lands and games', async function () {
     const {
       estateContract,
@@ -657,7 +661,6 @@ describe('EstateV2', function () {
         })
     ).to.be.revertedWith('LANDS_ARE_NOT_ADJACENT');
   });
-
   it('removing land that are associated with a game associated with more lands should fail', async function () {
     const {
       estateContract,
@@ -722,7 +725,6 @@ describe('EstateV2', function () {
         })
     ).to.be.revertedWith('GAME_IS_ATTACHED_TO_OTHER_LANDS');
   });
-
   it('removing all lands associated with a single game', async function () {
     const {
       estateContract,
@@ -801,7 +803,7 @@ describe('EstateV2', function () {
       expect(newEstateData.landIds).to.eql([]);
     }
   });
-
+  // setGameOfLands
   it('setting the game for all lands to 0', async function () {
     const {
       estateContract,
@@ -883,7 +885,6 @@ describe('EstateV2', function () {
       expect(newEstateData.landIds).to.eql(landIds);
     }
   });
-
   it('setting the game for all lands to the same gameId', async function () {
     const {
       estateContract,
@@ -967,7 +968,6 @@ describe('EstateV2', function () {
       expect(newEstateData.landIds).to.eql(landIds);
     }
   });
-
   it('setting different games for lands with the same game', async function () {
     const {
       estateContract,
@@ -1054,4 +1054,174 @@ describe('EstateV2', function () {
       expect(newEstateData.landIds).to.eql(landIds);
     }
   });
+  // burn
+  it('burn should fail for a non-existing estate', async function () {
+    const {estateContract, user0} = await setupEstate();
+
+    await expect(
+      estateContract.connect(ethers.provider.getSigner(user0)).burn(42)
+    ).to.be.revertedWith('TOKEN_DOES_NOT_EXIST');
+  });
+  it('should burn an estate successfuly', async function () {
+    const {
+      estateContract,
+      landContractAsMinter,
+      landContractAsUser0,
+      user0,
+      gameToken,
+      gameTokenAsUser0,
+    } = await setupEstate();
+    const uri =
+      '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+    const mintingData: LandMintingData[] = [
+      {beneficiary: user0, size: 1, x: 5, y: 12},
+      {beneficiary: user0, size: 1, x: 4, y: 12},
+      {beneficiary: user0, size: 1, x: 4, y: 11},
+    ];
+    const landIds = await mintLands(landContractAsMinter, mintingData);
+    const mintGameRes = await mintGames(gameToken, user0, [1], 0);
+    let gameIds = mintGameRes.gameIds;
+    gameIds = [gameIds[0], gameIds[0], gameIds[0]];
+
+    for (let i = 0; i < landIds.length; i++) {
+      await landContractAsUser0.approve(estateContract.address, landIds[i]);
+      await gameTokenAsUser0.approve(estateContract.address, gameIds[i]);
+    }
+
+    const receipt = await waitFor(
+      estateContract
+        .connect(ethers.provider.getSigner(user0))
+        .createEstate(user0, user0, {
+          landIds: landIds,
+          gameIds: gameIds,
+          uri,
+        })
+    );
+    const event = await expectEventWithArgs(
+      estateContract,
+      receipt,
+      'EstateTokenUpdated'
+    );
+    expect(event.args).not.be.equal(null);
+    let estateId;
+    if (event.args[0]) {
+      estateId = event.args[1].toHexString();
+      await waitFor(
+        estateContract.connect(ethers.provider.getSigner(user0)).burn(estateId)
+      );
+      const res = await estateContract.isBurned(estateId);
+      expect(res).to.be.equal(true);
+    }
+  });
+  it('should fail to burn same estate twice', async function () {
+    const {
+      estateContract,
+      landContractAsMinter,
+      landContractAsUser0,
+      user0,
+      gameToken,
+      gameTokenAsUser0,
+    } = await setupEstate();
+    const uri =
+      '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+    const mintingData: LandMintingData[] = [
+      {beneficiary: user0, size: 1, x: 5, y: 12},
+      {beneficiary: user0, size: 1, x: 4, y: 12},
+      {beneficiary: user0, size: 1, x: 4, y: 11},
+    ];
+    const landIds = await mintLands(landContractAsMinter, mintingData);
+    const mintGameRes = await mintGames(gameToken, user0, [1], 0);
+    let gameIds = mintGameRes.gameIds;
+    gameIds = [gameIds[0], gameIds[0], gameIds[0]];
+
+    for (let i = 0; i < landIds.length; i++) {
+      await landContractAsUser0.approve(estateContract.address, landIds[i]);
+      await gameTokenAsUser0.approve(estateContract.address, gameIds[i]);
+    }
+
+    const receipt = await waitFor(
+      estateContract
+        .connect(ethers.provider.getSigner(user0))
+        .createEstate(user0, user0, {
+          landIds: landIds,
+          gameIds: gameIds,
+          uri,
+        })
+    );
+    const event = await expectEventWithArgs(
+      estateContract,
+      receipt,
+      'EstateTokenUpdated'
+    );
+    expect(event.args).not.be.equal(null);
+    let estateId;
+    if (event.args[0]) {
+      estateId = event.args[1].toHexString();
+      await waitFor(
+        estateContract.connect(ethers.provider.getSigner(user0)).burn(estateId)
+      );
+      const res = await estateContract.isBurned(estateId);
+      expect(res).to.be.equal(true);
+      await expect(
+        estateContract.connect(ethers.provider.getSigner(user0)).burn(estateId)
+      ).to.be.revertedWith('TOKEN_DOES_NOT_EXIST');
+    }
+  });
+  // transferFromBurnedEstate
+  // it('transferFromBurnedEstate', async function () {
+  //   const {
+  //     estateContract,
+  //     landContractAsMinter,
+  //     landContractAsUser0,
+  //     user0,
+  //     gameToken,
+  //     gameTokenAsUser0,
+  //   } = await setupEstate();
+  //   const uri =
+  //     '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+  //   const mintingData: LandMintingData[] = [
+  //     {beneficiary: user0, size: 1, x: 5, y: 12},
+  //     {beneficiary: user0, size: 1, x: 4, y: 12},
+  //     {beneficiary: user0, size: 1, x: 4, y: 11},
+  //   ];
+  //   const landIds = await mintLands(landContractAsMinter, mintingData);
+  //   const mintGameRes = await mintGames(gameToken, user0, [1], 0);
+  //   let gameIds = mintGameRes.gameIds;
+  //   gameIds = [gameIds[0], gameIds[0], gameIds[0]];
+
+  //   for (let i = 0; i < landIds.length; i++) {
+  //     await landContractAsUser0.approve(estateContract.address, landIds[i]);
+  //     await gameTokenAsUser0.approve(estateContract.address, gameIds[i]);
+  //   }
+
+  //   const receipt = await waitFor(
+  //     estateContract
+  //       .connect(ethers.provider.getSigner(user0))
+  //       .createEstate(user0, user0, {
+  //         landIds: landIds,
+  //         gameIds: gameIds,
+  //         uri,
+  //       })
+  //   );
+  //   const event = await expectEventWithArgs(
+  //     estateContract,
+  //     receipt,
+  //     'EstateTokenUpdated'
+  //   );
+  //   expect(event.args).not.be.equal(null);
+  //   let estateId;
+  //   if (event.args[0]) {
+  //     estateId = event.args[1].toHexString();
+  //     await waitFor(
+  //       estateContract.connect(ethers.provider.getSigner(user0)).burn(estateId)
+  //     );
+  //     const res = await estateContract.isBurned(estateId);
+  //     expect(res).to.be.equal(true);
+  //     const receipt2 = await waitFor(
+  //       estateContract
+  //         .connect(ethers.provider.getSigner(user0))
+  //         .transferFromBurnedEstate(user0, user0, estateId)
+  //     );
+  //   }
+  // });
 });

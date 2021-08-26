@@ -64,9 +64,6 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         ERC2771Handler.__ERC2771Handler_initialize(trustedForwarder);
     }
 
-    // todo : restrict only for lands in size =1
-    // todo: verify access control for all functions
-
     // @todo Add access-control: minter-only? could inherit WithMinter.sol
     /// @notice Create a new estate token with adjacent lands.
     /// @param from The address of the one creating the estate.
@@ -186,12 +183,11 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         require(sender != address(this), "NOT_FROM_THIS");
         require(sender != address(uint160(0)), "NOT_FROM_ZERO");
         address msgSender = _msgSender();
-        require(msgSender == sender || _superOperators[msgSender], "not _check_authorized");
+        require(msgSender == sender || _superOperators[msgSender], "NOT_AUTHORIZED");
         require(sender == _withdrawalOwnerOf(estateId), "NOT_WITHDRAWAL_OWNER");
         (address owner, ) = _ownerAndOperatorEnabledOf(estateId);
-        // check that the estate has been burned
-        require(owner == address(0));
-        _removeLandsGames(to, estateId, landsToRemove);
+        require(isBurned(estateId), "ESTATE_NOT_BURNED");
+        _removeLandsGamesSkippingAdjacencyCheck(to, estateId, landsToRemove);
     }
 
     function burnAndTransferFromDestroyedEstate(
@@ -219,7 +215,7 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         return EstateData({landIds: landIds, gameIds: gameIds});
     }
 
-    function areLandsAdjacent(uint256[] memory landIds, uint256 landIdsSize) public view returns (bool) {
+    function areLandsAdjacent(uint256[] memory landIds, uint256 landIdsSize) public pure returns (bool) {
         if (landIdsSize == 0) {
             return true;
         }
@@ -262,6 +258,24 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         require(_ownerOf(id) != address(0), "BURNED_OR_NEVER_MINTED");
         uint256 immutableId = _storageId(id);
         return _toFullURI(_metaData[immutableId]);
+    }
+
+    function onERC721BatchReceived(
+        address, // operator,
+        address, // from,
+        uint256[] calldata, // ids,
+        bytes calldata // data
+    ) external pure returns (bytes4) {
+        revert("please call createEstate or updateEstate functions");
+    }
+
+    function onERC721Received(
+        address, // operator,
+        address, // from,
+        uint256, // tokenId,
+        bytes calldata // data
+    ) external pure returns (bytes4) {
+        revert("please call createEstate or updateEstate functions");
     }
 
     // //////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -365,8 +379,21 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
             }
         }
         require(areLandsAdjacent(ed.landIds, ed.landIds.length - removedLandsCounter), "LANDS_ARE_NOT_ADJACENT");
+        uint256[] memory gameIdsToRemove = _removeLandsGamesSkippingAdjacencyCheck(to, estateId, landsToRemove);
+        // a game should be removed only if all lands that attached to it are being removed too
+        for (uint256 j = 0; j < gameIdsToRemove.length; j++) {
+            require(gamesToLands[gameIdsToRemove[j]].length() == 0, "GAME_IS_ATTACHED_TO_OTHER_LANDS");
+        }
+    }
+
+    function _removeLandsGamesSkippingAdjacencyCheck(
+        address to,
+        uint256 estateId,
+        uint256[] memory landsToRemove
+    ) internal returns (uint256[] memory gameIdsToRemove) {
+        uint256 storageId = _storageId(estateId);
         uint256 length = landsToRemove.length;
-        uint256[] memory gameIdsToRemove = new uint256[](length);
+        gameIdsToRemove = new uint256[](length);
         uint256 gameIdsToRemoveSize;
         uint256 prevGameId;
         for (uint256 i = 0; i < length; i++) {
@@ -386,10 +413,7 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
             }
             prevGameId = gameId;
         }
-        // a game should be removed only if all lands that attached to it are being removed too
-        for (uint256 j = 0; j < gameIdsToRemove.length; j++) {
-            require(gamesToLands[gameIdsToRemove[j]].length() == 0, "GAME_IS_ATTACHED_TO_OTHER_LANDS");
-        }
+
         _land.batchTransferFrom(address(this), to, landsToRemove, "");
         if (gameIdsToRemoveSize > 0) {
             _gameToken.batchTransferFrom(address(this), to, gameIdsToRemove, "");
@@ -455,26 +479,26 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
     }
 
     function _check_authorized(address sender, uint8 action) internal view {
-        require(sender != address(uint160(0)), "sender is zero address");
+        require(sender != address(uint160(0)), "SENDER_IS_ZERO_ADDRESS");
         address msgSender = _msgSender();
         if (action == ADD) {
             address minter = _minter;
             require(msgSender == minter || msgSender == sender, "UNAUTHORIZED_ADD");
         } else {
-            require(msgSender == sender, "not _check_authorized");
+            require(msgSender == sender, "NOT_AUTHORIZED");
         }
     }
 
     function _check_hasOwnerRights(address sender, uint256 estateId) internal view {
         (address owner, bool operatorEnabled) = _ownerAndOperatorEnabledOf(estateId);
-        require(owner != address(uint160(0)), "token does not exist");
+        require(owner != address(uint160(0)), "TOKEN_DOES_NOT_EXIST");
         address msgSender = _msgSender();
         require(
             owner == sender ||
                 _superOperators[msgSender] ||
                 _operatorsForAll[sender][msgSender] ||
                 (operatorEnabled && _operators[estateId] == msgSender),
-            "not approved"
+            "NOT_APPROVED"
         );
     }
 
@@ -517,7 +541,7 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         uint16 version,
         bool isCreation
     ) internal returns (uint256, uint256 storageId) {
-        require(to != address(uint160(0)), "can't send to zero address");
+        require(to != address(uint160(0)), "CAN'T_SEND_TO_ZERO_ADDRESS");
         uint16 idVersion;
         uint256 estateId;
         uint256 strgId;
@@ -548,25 +572,6 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
             (x1 == x2 && y1 == y2 + 1) ||
             (x1 == x2 - 1 && y1 == y2) ||
             (x1 == x2 + 1 && y1 == y2));
-    }
-
-    // ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    function onERC721BatchReceived(
-        address, // operator,
-        address, // from,
-        uint256[] calldata, // ids,
-        bytes calldata // data
-    ) external pure returns (bytes4) {
-        revert("please call createEstate or updateEstate functions");
-    }
-
-    function onERC721Received(
-        address, // operator,
-        address, // from,
-        uint256, // tokenId,
-        bytes calldata // data
-    ) external pure returns (bytes4) {
-        revert("please call createEstate or updateEstate functions");
     }
 
     /// @dev Get the a full URI string for a given hash + gameId.

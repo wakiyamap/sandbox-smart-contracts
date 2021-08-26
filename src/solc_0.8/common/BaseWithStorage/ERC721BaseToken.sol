@@ -235,6 +235,11 @@ contract ERC721BaseToken is IERC721, WithSuperOperators, ERC2771Handler {
         return id == 0x01ffc9a7 || id == 0x80ac58cd;
     }
 
+    function isBurned(uint256 estateId) public view returns (bool) {
+        uint256 storageId = _storageId(estateId);
+        return (_owners[storageId] & BURNED_FLAG) == BURNED_FLAG;
+    }
+
     /// @dev By overriding this function in an implementation which inherits this contract, you can enable versioned tokenIds without the extra overhead of writing to a new storage slot in _owners each time a version is incremented. See GameToken._storageId() for an example, where the storageId is the tokenId minus the version number.
     /// !!! Caution !!! Overriding this function without taking appropriate care could lead to
     /// ownerOf() returning an owner for non-existent tokens. Tests should be written to
@@ -339,6 +344,7 @@ contract ERC721BaseToken is IERC721, WithSuperOperators, ERC2771Handler {
         address owner,
         uint256 id
     ) internal {
+        require(!isBurned(id), "ALREADY_BURNED");
         require(from == owner, "NOT_OWNER");
         uint256 storageId = _storageId(id);
         _owners[storageId] = (_owners[storageId] & NOT_OPERATOR_FLAG) | BURNED_FLAG; // record as non owner but keep track of last owner
