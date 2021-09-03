@@ -64,7 +64,7 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         ERC2771Handler.__ERC2771Handler_initialize(trustedForwarder);
     }
 
-    // @todo Add access-control: minter-only? could inherit WithMinter.sol
+    // @todo Add access-control: minter-only? could inherit WithMinter.sol, the game token creator is minter only
     /// @notice Create a new estate token with adjacent lands.
     /// @param from The address of the one creating the estate.
     /// @param to The address that will own the estate.
@@ -82,13 +82,13 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         return estateId;
     }
 
-    /// @notice lets the estate owner to add lands and/or add/remove games for these lands
+    /// @notice lets the estate owner add lands and/or add/remove games for these lands
     /// @param from The one updating the ESTATE token.
     /// @param to The address to transfer removed GAMES to.
     /// @param estateId The current id of the ESTATE token.
     /// @param update The data to use for the Estate update.
     /// @return The new estateId.
-    function addLandsToEstate(
+    function addLandsGamesToEstate(
         address from,
         address to,
         uint256 estateId,
@@ -215,6 +215,7 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         return EstateData({landIds: landIds, gameIds: gameIds});
     }
 
+    // A depth first search implementation
     function areLandsAdjacent(uint256[] memory landIds, uint256 landIdsSize) public pure returns (bool) {
         if (landIdsSize == 0) {
             return true;
@@ -342,17 +343,19 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
             }
         }
         require(areLandsAdjacent(newLands, newLands.length), "LANDS_ARE_NOT_ADJACENT");
-
         uint256[] memory gamesToAdd = new uint256[](gameIds.length);
         uint256 gamesToAddSize = 0;
         for (uint256 i = 0; i < landIdsToAdd.length; i++) {
             estates[storageId].set(landIdsToAdd[i], gameIds[i]);
-            // skip gameId=0 and duplicate games
             if (gameIds[i] == 0) {
                 continue;
-            } else if (i == 0 || gameIds[i] != gameIds[i - 1]) {
-                gamesToAdd[i] = gameIds[i];
-                gamesToAddSize++;
+            }
+            if (_gameToken.ownerOf(gameIds[i]) != address(this)) {
+                // skip gameId=0, duplicate games, and existing games
+                if (i == 0 || gameIds[i] != gameIds[i - 1]) {
+                    gamesToAdd[i] = gameIds[i];
+                    gamesToAddSize++;
+                }
             }
             gamesToLands[gameIds[i]].add(landIdsToAdd[i]);
         }
@@ -413,7 +416,6 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
             }
             prevGameId = gameId;
         }
-
         _land.batchTransferFrom(address(this), to, landsToRemove, "");
         if (gameIdsToRemoveSize > 0) {
             _gameToken.batchTransferFrom(address(this), to, gameIdsToRemove, "");
@@ -432,6 +434,8 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         uint256[] memory gamesToAdd = new uint256[](gameIds.length);
         uint256 prevOldGame;
         uint256 prevGame;
+        uint256 gamesToAddSize = 0;
+        uint256 gamesToRemoveSize = 0;
         for (uint256 i = 0; i < landIds.length; i++) {
             uint256 gameId = gameIds[i];
             // revert if land does not exist
@@ -440,21 +444,24 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
             // skip gameId=0 and games duplications
             if (oldGameId != 0 && oldGameId != prevOldGame) {
                 gamesToRemove[i] = oldGameId;
+                gamesToRemoveSize++;
+                gamesToLands[oldGameId].remove(landIds[i]);
             }
-            // skip gameId=0 and games duplications
+            // skip gameId=0, games duplications, and existing games
             if (gameId != 0) {
-                if (oldGameId != prevOldGame) {
+                if (oldGameId != prevOldGame && _gameToken.ownerOf(gameIds[i]) != address(this)) {
                     gamesToAdd[i] = gameId;
+                    gamesToAddSize++;
                 }
                 gamesToLands[gameId].add(landIds[i]);
             }
             prevOldGame = oldGameId;
             prevGame = gameId;
         }
-        if (gamesToAdd.length > 0) {
+        if (gamesToAddSize > 0) {
             _gameToken.batchTransferFrom(sender, address(this), gamesToAdd, "");
         }
-        if (gamesToRemove.length > 0) {
+        if (gamesToRemoveSize > 0) {
             _gameToken.batchTransferFrom(address(this), sender, gamesToRemove, "");
         }
     }
