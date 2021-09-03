@@ -187,7 +187,7 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         require(sender == _withdrawalOwnerOf(estateId), "NOT_WITHDRAWAL_OWNER");
         (address owner, ) = _ownerAndOperatorEnabledOf(estateId);
         require(isBurned(estateId), "ESTATE_NOT_BURNED");
-        _removeLandsGamesSkippingAdjacencyCheck(to, estateId, landsToRemove);
+        _removeLandsGamesNoAdjacencyCheck(to, estateId, landsToRemove);
     }
 
     function burnAndTransferFromDestroyedEstate(
@@ -317,7 +317,10 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         return false;
     }
 
-    // if the same game is used for many lands, it will be duplicated and the landIds will be ordered by the game id, otherwise it will revert.
+    // in case of multiple lands associated with a single game, these lands should be ordered by their common game token.
+    // for example, let's assume we have an estate with these lands and games : [L1,L2,L3]
+    // gameIds = [G1,G1,G2] will work,
+    // but gameIds = [G1,G2,G1] will not.
     function _addLandsGames(
         address sender,
         uint256 estateId,
@@ -386,14 +389,18 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
             }
         }
         require(areLandsAdjacent(ed.landIds, ed.landIds.length - removedLandsCounter), "LANDS_ARE_NOT_ADJACENT");
-        uint256[] memory gameIdsToRemove = _removeLandsGamesSkippingAdjacencyCheck(to, estateId, landsToRemove);
+        uint256[] memory gameIdsToRemove = _removeLandsGamesNoAdjacencyCheck(to, estateId, landsToRemove);
         // a game should be removed only if all lands that attached to it are being removed too
         for (uint256 j = 0; j < gameIdsToRemove.length; j++) {
             require(gamesToLands[gameIdsToRemove[j]].length() == 0, "GAME_IS_ATTACHED_TO_OTHER_LANDS");
         }
     }
 
-    function _removeLandsGamesSkippingAdjacencyCheck(
+    // in case of multiple lands associated with a single game, these lands should be ordered by their common game token.
+    // for example, let's assume we have an estate with these lands and games : [L1,L2,L3] -> [G1,G1,G2].
+    // landsToRemove = [L1,L2,L3] will work,
+    // but landsToRemove = [L1,L3,L2] will not.
+    function _removeLandsGamesNoAdjacencyCheck(
         address to,
         uint256 estateId,
         uint256[] memory landsToRemove
