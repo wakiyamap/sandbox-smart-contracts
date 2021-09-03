@@ -215,6 +215,10 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         return EstateData({landIds: landIds, gameIds: gameIds});
     }
 
+    function getLandsForGame(uint256 gameId) public view returns (uint256[] memory landIds) {
+        return gamesToLands[gameId].values();
+    }
+
     // A depth first search implementation
     function areLandsAdjacent(uint256[] memory landIds, uint256 landIdsSize) public pure returns (bool) {
         if (landIdsSize == 0) {
