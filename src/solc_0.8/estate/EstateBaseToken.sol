@@ -106,7 +106,6 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
 
     /// @notice Used to remove lands from an estate.
     // @review do we need from? only needed when called by approved/superoperators...
-    // @note see https://docs.google.com/document/d/1eXJP0Tp2C617kOkDNpLCS_hJXaGZizHkxJndMIlKpeQ/edit for offchain metadata solution
     /// @param from The address of the one removing lands.
     /// @param estateId The estate token to remove lands from.
     /// @param rebuild The data to use when reconstructing the Estate.
@@ -134,7 +133,7 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         uint256 storageId = _storageId(estateId);
         _metaData[storageId] = update.uri;
         _check_authorized(from, ADD);
-        _upsertGames(from, update.landIds, update.gameIds, storageId);
+        _setGamesOfLands(from, update.landIds, update.gameIds, storageId);
         uint256 newId = _incrementTokenVersion(from, estateId);
         emit EstateTokenUpdated(estateId, newId, update);
         return newId;
@@ -179,11 +178,11 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         uint256 estateId,
         uint256[] memory landsToRemove
     ) public {
+        require(isBurned(estateId), "ASSET_NOT_BURNED");
         require(sender != address(this), "NOT_FROM_THIS");
         address msgSender = _msgSender();
         require(msgSender == sender || _superOperators[msgSender], "NOT_AUTHORIZED");
         _check_withdrawal_authorized(sender, estateId);
-        require(isBurned(estateId), "ESTATE_NOT_BURNED");
         _removeLandsGamesNoAdjacencyCheck(to, estateId, landsToRemove);
     }
 
@@ -430,7 +429,7 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         }
     }
 
-    function _upsertGames(
+    function _setGamesOfLands(
         address sender,
         uint256[] memory landIds,
         uint256[] memory gameIds,

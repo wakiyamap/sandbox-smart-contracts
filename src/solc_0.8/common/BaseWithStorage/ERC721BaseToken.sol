@@ -8,6 +8,7 @@ import "./WithSuperOperators.sol";
 import "../interfaces/IERC721MandatoryTokenReceiver.sol";
 import "@openzeppelin/contracts-0.8/token/ERC721/IERC721.sol";
 import "./ERC2771Handler.sol";
+import "hardhat/console.sol";
 
 contract ERC721BaseToken is IERC721, WithSuperOperators, ERC2771Handler {
     using Address for address;
@@ -344,7 +345,6 @@ contract ERC721BaseToken is IERC721, WithSuperOperators, ERC2771Handler {
         address owner,
         uint256 id
     ) internal {
-        require(!isBurned(id), "ALREADY_BURNED");
         require(from == owner, "NOT_OWNER");
         uint256 storageId = _storageId(id);
         _owners[storageId] = (_owners[storageId] & NOT_OPERATOR_FLAG) | BURNED_FLAG; // record as non owner but keep track of last owner
