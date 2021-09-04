@@ -1438,60 +1438,80 @@ describe('EstateV2', function () {
     }
   });
   // transferFromBurnedEstate
-  // it('transferFromBurnedEstate', async function () {
-  //   const {
-  //     estateContract,
-  //     landContractAsMinter,
-  //     landContractAsUser0,
-  //     user0,
-  //     gameToken,
-  //     gameTokenAsUser0,
-  //   } = await setupEstate();
-  //   const uri =
-  //     '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
-  //   const mintingData: LandMintingData[] = [
-  //     {beneficiary: user0, size: 1, x: 5, y: 12},
-  //     {beneficiary: user0, size: 1, x: 4, y: 12},
-  //     {beneficiary: user0, size: 1, x: 4, y: 11},
-  //   ];
-  //   const landIds = await mintLands(landContractAsMinter, mintingData);
-  //   const mintGameRes = await mintGames(gameToken, user0, [1], 0);
-  //   let gameIds = mintGameRes.gameIds;
-  //   gameIds = [gameIds[0], gameIds[0], gameIds[0]];
+  it('burn an estate, transfer lands and games from it', async function () {
+    const {
+      estateContract,
+      landContractAsMinter,
+      landContractAsUser0,
+      user0,
+      gameToken,
+      gameTokenAsUser0,
+    } = await setupEstate();
+    const uri =
+      '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+    const mintingData: LandMintingData[] = [
+      {beneficiary: user0, size: 1, x: 5, y: 12},
+      {beneficiary: user0, size: 1, x: 4, y: 12},
+      {beneficiary: user0, size: 1, x: 4, y: 11},
+    ];
+    const landIds = await mintLands(landContractAsMinter, mintingData);
+    const mintGameRes = await mintGames(gameToken, user0, [1], 0);
+    let gameIds = mintGameRes.gameIds;
+    gameIds = [gameIds[0], gameIds[0], gameIds[0]];
 
-  //   for (let i = 0; i < landIds.length; i++) {
-  //     await landContractAsUser0.approve(estateContract.address, landIds[i]);
-  //     await gameTokenAsUser0.approve(estateContract.address, gameIds[i]);
-  //   }
+    for (let i = 0; i < landIds.length; i++) {
+      await landContractAsUser0.approve(estateContract.address, landIds[i]);
+      await gameTokenAsUser0.approve(estateContract.address, gameIds[i]);
+    }
 
-  //   const receipt = await waitFor(
-  //     estateContract
-  //       .connect(ethers.provider.getSigner(user0))
-  //       .createEstate(user0, user0, {
-  //         landIds: landIds,
-  //         gameIds: gameIds,
-  //         uri,
-  //       })
-  //   );
-  //   const event = await expectEventWithArgs(
-  //     estateContract,
-  //     receipt,
-  //     'EstateTokenUpdated'
-  //   );
-  //   expect(event.args).not.be.equal(null);
-  //   let estateId;
-  //   if (event.args[0]) {
-  //     estateId = event.args[1].toHexString();
-  //     await waitFor(
-  //       estateContract.connect(ethers.provider.getSigner(user0)).burn(estateId)
-  //     );
-  //     const res = await estateContract.isBurned(estateId);
-  //     expect(res).to.be.equal(true);
-  //     const receipt2 = await waitFor(
-  //       estateContract
-  //         .connect(ethers.provider.getSigner(user0))
-  //         .transferFromBurnedEstate(user0, user0, estateId)
-  //     );
-  //   }
-  // });
+    const receipt = await waitFor(
+      estateContract
+        .connect(ethers.provider.getSigner(user0))
+        .createEstate(user0, user0, {
+          landIds: landIds,
+          gameIds: gameIds,
+          uri,
+        })
+    );
+    const event = await expectEventWithArgs(
+      estateContract,
+      receipt,
+      'EstateTokenUpdated'
+    );
+    expect(event.args).not.be.equal(null);
+    let estateId;
+    if (event.args[0]) {
+      estateId = event.args[1].toHexString();
+      await waitFor(
+        estateContract.connect(ethers.provider.getSigner(user0)).burn(estateId)
+      );
+      const res = await estateContract.isBurned(estateId);
+      expect(res).to.be.equal(true);
+      await waitFor(
+        estateContract
+          .connect(ethers.provider.getSigner(user0))
+          .transferFromBurnedEstate(user0, user0, estateId, [landIds[0]])
+      );
+
+      await waitFor(
+        estateContract
+          .connect(ethers.provider.getSigner(user0))
+          .transferFromBurnedEstate(user0, user0, estateId, [
+            landIds[1],
+            landIds[2],
+          ])
+      );
+      const newEstateData = await estateContract.callStatic.getEstateData(
+        estateId
+      );
+      expect(newEstateData.gameIds).to.eql([]);
+      expect(newEstateData.landIds).to.eql([]);
+      const newGameOwner = await gameToken.ownerOf(gameIds[0]);
+      expect(newGameOwner).to.be.equal(user0);
+      for (let i = 0; i < landIds.length; i++) {
+        const newLandOwner = await landContractAsMinter.ownerOf(landIds[i]);
+        expect(newLandOwner).to.be.equal(user0);
+      }
+    }
+  });
 });

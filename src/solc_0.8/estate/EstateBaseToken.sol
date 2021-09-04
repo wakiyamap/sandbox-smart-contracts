@@ -179,13 +179,10 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         uint256 estateId,
         uint256[] memory landsToRemove
     ) public {
-        _check_authorized(sender, WITHDRAWAL);
         require(sender != address(this), "NOT_FROM_THIS");
-        require(sender != address(uint160(0)), "NOT_FROM_ZERO");
         address msgSender = _msgSender();
         require(msgSender == sender || _superOperators[msgSender], "NOT_AUTHORIZED");
-        require(sender == _withdrawalOwnerOf(estateId), "NOT_WITHDRAWAL_OWNER");
-        (address owner, ) = _ownerAndOperatorEnabledOf(estateId);
+        _check_withdrawal_authorized(sender, estateId);
         require(isBurned(estateId), "ESTATE_NOT_BURNED");
         _removeLandsGamesNoAdjacencyCheck(to, estateId, landsToRemove);
     }
@@ -416,14 +413,14 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
             // skip gameId=0 and duplicate games
             if (gameId != 0) {
                 gamesToLands[gameId].remove(landsToRemove[i]);
-                if (i > 0) {
-                    if (gameId == prevGameId) {
-                        prevGameId = gameId;
-                        continue;
-                    }
+                if (i > 0 && gameId == prevGameId) {
+                    prevGameId = gameId;
+                    continue;
                 }
-                gameIdsToRemove[i] = gameId;
-                gameIdsToRemoveSize++;
+                if (_gameToken.ownerOf(gameId) == address(this)) {
+                    gameIdsToRemove[i] = gameId;
+                    gameIdsToRemoveSize++;
+                }
             }
             prevGameId = gameId;
         }
