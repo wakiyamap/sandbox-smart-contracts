@@ -99,7 +99,7 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         _metaData[storageId] = update.uri;
         _check_authorized(from, ADD);
         _addLandsGames(from, estateId, update.landIds, update.gameIds, false);
-        uint256 newId = _incrementTokenVersion(from, estateId);
+        uint256 newId = _incrementTokenVersion(to, estateId);
         emit EstateTokenUpdated(estateId, newId, update);
         return newId;
     }
@@ -112,13 +112,14 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
     /// @dev Note that a valid estate can only contain adjacent lands, so it is possible to attempt to remove lands in a way that would result in an invalid estate, which must be prevented.
     function removeLandsFromEstate(
         address from,
+        address to,
         uint256 estateId,
         EstateCRUDData memory rebuild
     ) external returns (uint256) {
         _check_hasOwnerRights(from, estateId);
         _check_authorized(from, ADD);
         _removeLandsGames(from, estateId, rebuild.landIds);
-        uint256 newId = _incrementTokenVersion(from, estateId);
+        uint256 newId = _incrementTokenVersion(to, estateId);
         emit EstateTokenUpdated(estateId, newId, rebuild);
         return newId;
     }
@@ -134,7 +135,7 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         _metaData[storageId] = update.uri;
         _check_authorized(from, ADD);
         _setGamesOfLands(from, update.landIds, update.gameIds, storageId);
-        uint256 newId = _incrementTokenVersion(from, estateId);
+        uint256 newId = _incrementTokenVersion(to, estateId);
         emit EstateTokenUpdated(estateId, newId, update);
         return newId;
     }

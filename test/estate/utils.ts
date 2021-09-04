@@ -19,7 +19,7 @@ export async function getNewGame(
   assetIds: BigNumber[] | null,
   assetAmounts: number[] | null,
   subId: number
-) {
+): Promise<BigNumber> {
   if (assetIds) {
     if (!assetAmounts || assetIds.length != assetAmounts.length) {
       throw new Error('Input Parameter length mismatch in getNewGame');

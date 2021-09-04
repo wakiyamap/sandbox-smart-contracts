@@ -45,7 +45,7 @@ async function mintGames(
   creator: Address,
   supplies: number[],
   nextId: number
-): Promise<any> {
+): Promise<{gameIds: BigNumber[]; lastId: number}> {
   const gameIds: BigNumber[] = [];
   const assets = await supplyAssets(creator, supplies);
   for (let i = 0; i < assets.length; i++) {
@@ -94,16 +94,19 @@ describe('EstateV2', function () {
       landContractAsMinter.filters.Transfer()
     );
     const event = landMintingEvents.filter((e) => e.event === 'Transfer')[0];
-    const landId = event.args![2];
-    await expect(
-      estateContract
-        .connect(ethers.provider.getSigner(user0))
-        .createEstate(user0, user0, {
-          landIds: [landId],
-          gameIds: [],
-          uri,
-        })
-    ).to.be.revertedWith(`DIFFERENT_LENGTH_LANDS_GAMES`);
+    expect(event.args).not.be.equal(null);
+    if (event.args) {
+      const landId = event.args[2];
+      await expect(
+        estateContract
+          .connect(ethers.provider.getSigner(user0))
+          .createEstate(user0, user0, {
+            landIds: [landId],
+            gameIds: [],
+            uri,
+          })
+      ).to.be.revertedWith(`DIFFERENT_LENGTH_LANDS_GAMES`);
+    }
   });
   it('create an estate with a single land and game', async function () {
     const {
@@ -506,15 +509,15 @@ describe('EstateV2', function () {
       {beneficiary: user0, size: 1, x: 4, y: 12},
     ];
     const landIdsToAdd = await mintLands(landContractAsMinter, mintingData2);
-    let gameIdsToAdd = await mintGames(gameToken, user0, [1, 1], lastId);
-    gameIdsToAdd = gameIdsToAdd.gameIds;
+    const gameIdsToAdd = await mintGames(gameToken, user0, [1, 1], lastId);
+    const _gamesToAdd = gameIdsToAdd.gameIds;
 
     for (let i = 0; i < landIdsToAdd.length; i++) {
       await landContractAsUser0.approve(
         estateContract.address,
         landIdsToAdd[i]
       );
-      await gameTokenAsUser0.approve(estateContract.address, gameIdsToAdd[i]);
+      await gameTokenAsUser0.approve(estateContract.address, _gamesToAdd[i]);
     }
 
     const receipt2 = await waitFor(
@@ -522,7 +525,7 @@ describe('EstateV2', function () {
         .connect(ethers.provider.getSigner(user0))
         .addLandsGamesToEstate(user0, user0, estateId, {
           landIds: landIdsToAdd,
-          gameIds: gameIdsToAdd,
+          gameIds: _gamesToAdd,
           uri,
         })
     );
@@ -699,7 +702,7 @@ describe('EstateV2', function () {
     const receipt2 = await waitFor(
       estateContract
         .connect(ethers.provider.getSigner(user0))
-        .removeLandsFromEstate(user0, estateId, {
+        .removeLandsFromEstate(user0, user0, estateId, {
           landIds: landIdsToRemove,
           gameIds: [],
           uri,
@@ -781,7 +784,7 @@ describe('EstateV2', function () {
     await expect(
       estateContract
         .connect(ethers.provider.getSigner(user0))
-        .removeLandsFromEstate(user0, estateId, {
+        .removeLandsFromEstate(user0, user0, estateId, {
           landIds: landIdsToRemove,
           gameIds: [],
           uri,
@@ -845,7 +848,7 @@ describe('EstateV2', function () {
     await expect(
       estateContract
         .connect(ethers.provider.getSigner(user0))
-        .removeLandsFromEstate(user0, estateId, {
+        .removeLandsFromEstate(user0, user0, estateId, {
           landIds: landIdsToRemove,
           gameIds: [],
           uri,
@@ -909,7 +912,7 @@ describe('EstateV2', function () {
     const landIdsToRemove = landIds;
     const receipt2 = await estateContract
       .connect(ethers.provider.getSigner(user0))
-      .removeLandsFromEstate(user0, estateId, {
+      .removeLandsFromEstate(user0, user0, estateId, {
         landIds: landIdsToRemove,
         gameIds: [],
         uri,
@@ -988,7 +991,7 @@ describe('EstateV2', function () {
     await expect(
       estateContract
         .connect(ethers.provider.getSigner(user0))
-        .removeLandsFromEstate(user0, estateId, {
+        .removeLandsFromEstate(user0, user0, estateId, {
           landIds: landIdsToRemove,
           gameIds: [],
           uri,
@@ -1052,7 +1055,7 @@ describe('EstateV2', function () {
     const landIdsToRemove = landIds;
     const receipt2 = await estateContract
       .connect(ethers.provider.getSigner(user0))
-      .removeLandsFromEstate(user0, estateId, {
+      .removeLandsFromEstate(user0, user0, estateId, {
         landIds: landIdsToRemove,
         gameIds: [],
         uri,
@@ -1544,7 +1547,7 @@ describe('EstateV2', function () {
       await expect(
         estateContract
           .connect(ethers.provider.getSigner(user0))
-          .removeLandsFromEstate(user0, estateId, {
+          .removeLandsFromEstate(user0, user0, estateId, {
             landIds: landIds,
             gameIds: [],
             uri,
