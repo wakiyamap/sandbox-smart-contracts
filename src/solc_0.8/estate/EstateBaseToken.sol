@@ -378,8 +378,8 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         EstateData memory ed = getEstateData(storageId);
         uint256 removedLandsCounter;
         for (uint256 k = 0; k < ed.landIds.length; k++) {
-            for (uint256 l = 0; l < landsToRemove.length; l++) {
-                if (ed.landIds[k] == landsToRemove[l]) {
+            for (uint256 i = 0; i < landsToRemove.length; i++) {
+                if (ed.landIds[k] == landsToRemove[i]) {
                     ed.landIds[k] = 0;
                     removedLandsCounter++;
                 }
