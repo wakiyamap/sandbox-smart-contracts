@@ -134,6 +134,11 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         _check_authorized(from, ADD);
         (uint256[] memory gamesToRemove, uint256[] memory gamesToAdd) =
             _setGamesOfLands(storageId, update.landIds, update.gameIds, false);
+        for (uint256 j = 0; j < gamesToRemove.length; j++) {
+            if (gamesToLands[gamesToRemove[j]].length() != 0) {
+                gamesToRemove[j] = 0;
+            }
+        }
         _gameToken.batchTransferFrom(address(this), to, gamesToRemove, "");
         _gameToken.batchTransferFrom(from, address(this), gamesToAdd, "");
         uint256 newId = _incrementTokenVersion(to, estateId);

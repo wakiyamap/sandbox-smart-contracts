@@ -1327,6 +1327,87 @@ describe('EstateV2', function () {
       expect(newEstateData.landIds).to.eql(landIds);
     }
   });
+  it('setting a game that is associated with two lands to zero only for one land should not withdraw the game', async function () {
+    const {
+      estateContract,
+      landContractAsMinter,
+      landContractAsUser0,
+      user0,
+      gameToken,
+      gameTokenAsUser0,
+    } = await setupEstate();
+    const uri =
+      '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+    const mintingData: LandMintingData[] = [
+      {beneficiary: user0, size: 1, x: 5, y: 12},
+      {beneficiary: user0, size: 1, x: 4, y: 12},
+    ];
+    const landIds = await mintLands(landContractAsMinter, mintingData);
+    const mintGameRes = await mintGames(gameToken, user0, [1], 0);
+    let gameIds = mintGameRes.gameIds;
+    gameIds = [gameIds[0], gameIds[0]];
+
+    for (let i = 0; i < landIds.length; i++) {
+      await landContractAsUser0.approve(estateContract.address, landIds[i]);
+      await gameTokenAsUser0.approve(estateContract.address, gameIds[i]);
+    }
+
+    await waitFor(
+      estateContract
+        .connect(ethers.provider.getSigner(user0))
+        .createEstate(user0, user0, {
+          landIds: landIds,
+          gameIds: gameIds,
+          uri,
+        })
+    );
+
+    const estateCreationEvents = await estateContract.queryFilter(
+      estateContract.filters.EstateTokenUpdated()
+    );
+    const estateCreationEvent = estateCreationEvents.filter(
+      (e) => e.event === 'EstateTokenUpdated'
+    );
+    expect(estateCreationEvent[0].args).not.be.equal(null);
+    let estateId;
+    if (estateCreationEvent[0].args) {
+      expect(estateCreationEvent[0].args[2].gameIds).to.be.eql(gameIds);
+      expect(estateCreationEvent[0].args[2].landIds).to.be.eql(landIds);
+      expect(estateCreationEvent[0].args[2].uri).to.be.equal(uri);
+      estateId = estateCreationEvent[0].args[1];
+      const estateData = await estateContract.callStatic.getEstateData(
+        estateId
+      );
+      expect(estateData.gameIds).to.be.eql(gameIds);
+      expect(estateData.landIds).to.be.eql(landIds);
+    }
+
+    const receipt2 = await estateContract
+      .connect(ethers.provider.getSigner(user0))
+      .setGamesOfLands(user0, user0, estateId, {
+        landIds: [landIds[0]],
+        gameIds: [0],
+        uri,
+      });
+    const event = await expectEventWithArgs(
+      estateContract,
+      receipt2,
+      'EstateTokenUpdated'
+    );
+    expect(event.args).not.be.equal(null);
+    let newId;
+    if (event.args[0]) {
+      newId = event.args[1].toHexString();
+      const newEstateData = await estateContract.callStatic.getEstateData(
+        newId
+      );
+      expect(newEstateData.gameIds).to.eql([BigNumber.from(0), gameIds[0]]);
+      expect(newEstateData.landIds).to.eql(landIds);
+      expect(await gameToken.ownerOf(gameIds[0])).to.be.equal(
+        estateContract.address
+      );
+    }
+  });
   // burn
   it('burn should fail for a non-existing estate', async function () {
     const {estateContract, user0} = await setupEstate();
