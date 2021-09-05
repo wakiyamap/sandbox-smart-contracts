@@ -288,38 +288,6 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
 
     // //////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    function _addUnvisitedAdjacentLands(
-        uint16 x1,
-        uint16 y1,
-        uint256[] memory landIds,
-        uint256[] memory visitedLands,
-        uint256[] memory stack,
-        uint256 stackSize
-    ) internal pure returns (uint256) {
-        // maximum of 4 adjacent lands is possible
-        for (uint256 i = 0; i < landIds.length; i++) {
-            if (landIds[i] == 0) {
-                continue;
-            }
-            uint16 x2 = uint16(landIds[i] % GRID_SIZE);
-            uint16 y2 = uint16(landIds[i] / GRID_SIZE);
-            if (_areAdjacent(x1, y1, x2, y2) && !isLandVisited(landIds[i], visitedLands)) {
-                stack[stackSize] = landIds[i];
-                stackSize++;
-            }
-        }
-        return stackSize;
-    }
-
-    function isLandVisited(uint256 landId, uint256[] memory visitedLands) internal pure returns (bool) {
-        for (uint256 i = 0; i < visitedLands.length; i++) {
-            if (visitedLands[i] == landId) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     function _addLandsGames(
         address sender,
         uint256 estateId,
@@ -446,54 +414,6 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         return newId;
     }
 
-    function _check_authorized(address sender, uint8 action) internal view {
-        require(sender != address(uint160(0)), "SENDER_IS_ZERO_ADDRESS");
-        address msgSender = _msgSender();
-        if (action == ADD) {
-            address minter = _minter;
-            require(msgSender == minter || msgSender == sender, "UNAUTHORIZED_ADD");
-        } else {
-            require(msgSender == sender, "NOT_AUTHORIZED");
-        }
-    }
-
-    function _check_hasOwnerRights(address sender, uint256 estateId) internal view {
-        (address owner, bool operatorEnabled) = _ownerAndOperatorEnabledOf(estateId);
-        require(owner != address(uint160(0)), "TOKEN_DOES_NOT_EXIST");
-        address msgSender = _msgSender();
-        require(
-            owner == sender ||
-                _superOperators[msgSender] ||
-                _operatorsForAll[sender][msgSender] ||
-                (operatorEnabled && _operators[estateId] == msgSender),
-            "NOT_APPROVED"
-        );
-    }
-
-    // //////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    function _encode(
-        uint16 x,
-        uint16 y,
-        uint8 size
-    ) internal pure returns (uint24) {
-        return uint24(size) * uint24(2**18) + (uint24(x) + uint24(y) * GRID_SIZE);
-    }
-
-    function _decode(uint24 data)
-        internal
-        pure
-        returns (
-            uint16 x,
-            uint16 y,
-            uint8 size
-        )
-    {
-        size = uint8(data / (2**18));
-        y = uint16((data % (2**18)) / GRID_SIZE);
-        x = uint16(data % GRID_SIZE);
-    }
-
     /// @dev Create a new (or incremented) estateId and associate it with an owner.
     /// @param from The address of one creating the Estate.
     /// @param to The address of the Estate owner.
@@ -528,6 +448,84 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         _numNFTPerAddress[to]++;
         emit Transfer(address(0), to, estateId);
         return (estateId, strgId);
+    }
+
+    function _check_authorized(address sender, uint8 action) internal view {
+        require(sender != address(uint160(0)), "SENDER_IS_ZERO_ADDRESS");
+        address msgSender = _msgSender();
+        if (action == ADD) {
+            address minter = _minter;
+            require(msgSender == minter || msgSender == sender, "UNAUTHORIZED_ADD");
+        } else {
+            require(msgSender == sender, "NOT_AUTHORIZED");
+        }
+    }
+
+    function _check_hasOwnerRights(address sender, uint256 estateId) internal view {
+        (address owner, bool operatorEnabled) = _ownerAndOperatorEnabledOf(estateId);
+        require(owner != address(uint160(0)), "TOKEN_DOES_NOT_EXIST");
+        address msgSender = _msgSender();
+        require(
+            owner == sender ||
+                _superOperators[msgSender] ||
+                _operatorsForAll[sender][msgSender] ||
+                (operatorEnabled && _operators[estateId] == msgSender),
+            "NOT_APPROVED"
+        );
+    }
+
+    function _addUnvisitedAdjacentLands(
+        uint16 x1,
+        uint16 y1,
+        uint256[] memory landIds,
+        uint256[] memory visitedLands,
+        uint256[] memory stack,
+        uint256 stackSize
+    ) internal pure returns (uint256) {
+        // maximum of 4 adjacent lands is possible
+        for (uint256 i = 0; i < landIds.length; i++) {
+            if (landIds[i] == 0) {
+                continue;
+            }
+            uint16 x2 = uint16(landIds[i] % GRID_SIZE);
+            uint16 y2 = uint16(landIds[i] / GRID_SIZE);
+            if (_areAdjacent(x1, y1, x2, y2) && !isLandVisited(landIds[i], visitedLands)) {
+                stack[stackSize] = landIds[i];
+                stackSize++;
+            }
+        }
+        return stackSize;
+    }
+
+    function isLandVisited(uint256 landId, uint256[] memory visitedLands) internal pure returns (bool) {
+        for (uint256 i = 0; i < visitedLands.length; i++) {
+            if (visitedLands[i] == landId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function _encode(
+        uint16 x,
+        uint16 y,
+        uint8 size
+    ) internal pure returns (uint24) {
+        return uint24(size) * uint24(2**18) + (uint24(x) + uint24(y) * GRID_SIZE);
+    }
+
+    function _decode(uint24 data)
+        internal
+        pure
+        returns (
+            uint16 x,
+            uint16 y,
+            uint8 size
+        )
+    {
+        size = uint8(data / (2**18));
+        y = uint16((data % (2**18)) / GRID_SIZE);
+        x = uint16(data % GRID_SIZE);
     }
 
     function _areAdjacent(
