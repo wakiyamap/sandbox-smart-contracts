@@ -20,6 +20,7 @@ export const setupEstate = deployments.createFixture(async function () {
     'ChildEstateToken',
     minter
   );
+<<<<<<< HEAD
   const landContract = await ethers.getContract('MockLandWithMint');
   //const landAdmin = await landContract.callStatic.getAdmin();
 
@@ -48,6 +49,36 @@ export const setupEstate = deployments.createFixture(async function () {
       .connect(ethers.provider.getSigner(landAdmin))
       .setSuperOperator(estateContract.address, true)
   );*/
+=======
+  const landContract = await ethers.getContract('Land');
+  const landAdmin = await landContract.callStatic.getAdmin();
+
+  const landContractAsUser0 = await landContract.connect(
+    ethers.provider.getSigner(user0)
+  );
+  const landContractAsMinter = await landContract.connect(
+    ethers.provider.getSigner(minter)
+  );
+  const gameTokenAsAdmin = await ethers.getContract(
+    'ChildGameToken',
+    gameTokenAdmin
+  );
+  const gameTokenAsUser0 = await gameToken.connect(
+    ethers.provider.getSigner(user0)
+  );
+
+  await waitFor(
+    landContract
+      .connect(ethers.provider.getSigner(landAdmin))
+      .setMinter(minter, true)
+  );
+
+  await waitFor(
+    landContract
+      .connect(ethers.provider.getSigner(landAdmin))
+      .setSuperOperator(estateContract.address, true)
+  );
+>>>>>>> starting branch from master
   await gameTokenAsAdmin.changeMinter(gameTokenAdmin);
   return {
     estateContract,
