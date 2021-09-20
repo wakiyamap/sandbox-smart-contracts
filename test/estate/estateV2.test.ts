@@ -125,10 +125,9 @@ describe('EstateV2', function () {
     const landIds = await mintLands(landContractAsMinter, mintingData);
     const {gameIds} = await mintGames(gameToken, user0, [1], 0);
 
-    for (let i = 0; i < landIds.length; i++) {
-      await landContractAsUser0.approve(estateContract.address, landIds[i]);
-      await gameTokenAsUser0.approve(estateContract.address, gameIds[i]);
-    }
+    await landContractAsUser0.batchApprove(estateContract.address, landIds);
+    await gameTokenAsUser0.batchApprove(estateContract.address, gameIds);
+
     await waitFor(
       estateContract
         .connect(ethers.provider.getSigner(user0))

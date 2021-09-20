@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "../BaseWithStorage/ERC721BaseToken.sol";
+import "../BaseWithStorage/ERC721ExtendedBaseToken.sol";
 
-contract ImmutableERC721 is ERC721BaseToken {
+contract ImmutableERC721 is ERC721ExtendedBaseToken {
     uint256 internal constant CREATOR_OFFSET_MULTIPLIER = uint256(2)**(256 - 160);
     uint256 internal constant SUBID_MULTIPLIER = uint256(2)**(256 - 224);
     uint256 internal constant CHAIN_INDEX_OFFSET_MULTIPLIER = uint256(2)**(256 - 160 - 64 - 16);

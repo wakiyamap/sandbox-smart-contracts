@@ -1,9 +1,9 @@
 /* solhint-disable func-order, code-complexity */
 pragma solidity 0.5.9;
 
-import "./ERC721BaseToken.sol";
+import "./ERC721ExtendedBaseToken.sol";
 
-contract LandBaseToken is ERC721BaseToken {
+contract LandBaseToken is ERC721ExtendedBaseToken {
     // Our grid is 408 x 408 lands
     uint256 internal constant GRID_SIZE = 408;
 

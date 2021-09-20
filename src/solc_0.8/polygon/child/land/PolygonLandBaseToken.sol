@@ -3,9 +3,9 @@
 pragma solidity 0.8.2;
 
 import "@openzeppelin/contracts-0.8/utils/Address.sol";
-import "../../../common/BaseWithStorage/ERC721BaseToken.sol";
+import "../../../common/BaseWithStorage/ERC721ExtendedBaseToken.sol";
 
-contract PolygonLandBaseToken is ERC721BaseToken {
+contract PolygonLandBaseToken is ERC721ExtendedBaseToken {
     using Address for address;
 
     uint256 internal constant GRID_SIZE = 408;

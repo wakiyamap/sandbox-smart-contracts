@@ -2,9 +2,9 @@
 /* solhint-disable func-order, code-complexity */
 pragma solidity 0.8.2;
 
-import "../common/BaseWithStorage/ERC721BaseToken.sol";
+import "../common/BaseWithStorage/ERC721ExtendedBaseToken.sol";
 
-contract SimplifiedLandBaseToken is ERC721BaseToken {
+contract SimplifiedLandBaseToken is ERC721ExtendedBaseToken {
     // Our grid is 408 x 408 lands
     uint256 internal constant GRID_SIZE = 408;
     // set ChildChainManager as only minter for Polygon, but keep flexibility for other L2s
