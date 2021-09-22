@@ -24,8 +24,12 @@ nav:
           - Features: topics/blockchain/features.md
       - Asset:
           - Giveaway:
-            - Single: topics/asset/giveaway/single.md
-            - Multiple: topics/asset/giveaway/multiple.md
+              - Single: topics/asset/giveaway/single.md
+              - Multiple: topics/asset/giveaway/multiple.md
+      - Common:
+          - BaseWithStorage:
+              - Erc721BaseWithStorage: topics/common/base-with-storage/erc-721-base-with-storage.md
+              - Erc721ExtendedBaseWithStorage: topics/common/base-with-storage/erc-721-extended-base-with-storage.md
       - Solidity:
           - Guideline: topics/guideline/solidity.md
       - DeFi:
