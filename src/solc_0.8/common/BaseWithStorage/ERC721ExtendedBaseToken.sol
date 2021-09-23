@@ -5,8 +5,6 @@ pragma solidity 0.8.2;
 import "./ERC721BaseToken.sol";
 
 contract ERC721ExtendedBaseToken is ERC721BaseToken {
-
-
     /// @notice Approve an operator to spend tokens on the senders behalf.
     /// @param operator The address receiving the approval.
     /// @param ids Ids of tokens.
@@ -24,7 +22,6 @@ contract ERC721ExtendedBaseToken is ERC721BaseToken {
         address operator,
         uint256[] memory ids
     ) public {
-
         address msgSender = _msgSender();
         require(sender != address(0), "ZERO_ADDRESS_SENDER");
 
@@ -37,9 +34,9 @@ contract ERC721ExtendedBaseToken is ERC721BaseToken {
         bool ownerDataSetted = false;
         uint256 ownerData = 0;
         uint256 length = ids.length;
-        for(uint256 i=0; i < length; i++){
+        for (uint256 i = 0; i < length; i++) {
             uint256 ow = _owners[_storageId(ids[i])];
-            if(ownerDataSetted && ownerData != ow){
+            if (ownerDataSetted && ownerData != ow) {
                 sameOwner = false;
                 ownerDataSetted = true;
                 break;
@@ -61,23 +58,22 @@ contract ERC721ExtendedBaseToken is ERC721BaseToken {
         uint256 flag = 0;
         address owner = address(uint160(ownerData));
 
-        bool hasOperator=false;
+        bool hasOperator = false;
         if (operator == address(0)) {
-             flag = ((ownerData & NOT_ADDRESS) & NOT_OPERATOR_FLAG) | uint256(uint160(owner));
+            flag = ((ownerData & NOT_ADDRESS) & NOT_OPERATOR_FLAG) | uint256(uint160(owner));
         } else {
-             flag = (ownerData & NOT_ADDRESS) | OPERATOR_FLAG | uint256(uint160(owner));
-             hasOperator=true;
+            flag = (ownerData & NOT_ADDRESS) | OPERATOR_FLAG | uint256(uint160(owner));
+            hasOperator = true;
         }
 
         uint256 length = ids.length;
-        for(uint256 i=0; i < length; i++){
+        for (uint256 i = 0; i < length; i++) {
             uint256 id = ids[i];
             _owners[_storageId(id)] = flag;
-            if(hasOperator){
+            if (hasOperator) {
                 _operators[id] = operator;
             }
             emit Approval(owner, operator, id);
         }
     }
-
 }
