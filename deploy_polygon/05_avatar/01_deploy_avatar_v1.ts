@@ -1,7 +1,6 @@
 import {HardhatRuntimeEnvironment} from 'hardhat/types';
 import {DeployFunction} from 'hardhat-deploy/types';
-import {skipUnlessTestOrL2} from '../../utils/network';
-import {getContractOrNull} from '@nomiclabs/hardhat-ethers/dist/src/helpers';
+import {skipUnlessTestnet} from '../../utils/network';
 import {AddressZero} from '@ethersproject/constants';
 
 const func: DeployFunction = async function (
@@ -9,16 +8,14 @@ const func: DeployFunction = async function (
 ): Promise<void> {
   const {deployments, getNamedAccounts} = hre;
   const {deployer, upgradeAdmin, sandAdmin} = await getNamedAccounts();
-  const {deploy} = deployments;
 
   const TRUSTED_FORWARDER = await deployments.get('TRUSTED_FORWARDER');
-  const CHILD_CHAIN_MANAGER = await deployments.get('CHILD_CHAIN_MANAGER');
-  const l1TokenAddress = await getContractOrNull(hre, 'Avatar');
-  if (!l1TokenAddress) {
-    console.warn("We don't have the address of the L1 avatar contract!!!");
-  }
+  // TODO: Check if we want a L1 token!!!
+  const l1TokenAddress = await hre.companionNetworks['l1'].deployments.get(
+    'Avatar'
+  ); // layer 1
   const adminRole = sandAdmin;
-  await deploy('PolygonAvatar', {
+  await deployments.deploy('PolygonAvatar', {
     from: deployer,
     log: true,
     skipIfAlreadyDeployed: true,
@@ -39,21 +36,9 @@ const func: DeployFunction = async function (
       upgradeIndex: 0,
     },
   });
-  // Grant roles.
-  const childChainManagerRole = await deployments.read(
-    'PolygonAvatar',
-    'CHILD_MANAGER_ROLE'
-  );
-  await deployments.execute(
-    'PolygonAvatar',
-    {from: adminRole, log: true},
-    'grantRole',
-    childChainManagerRole,
-    CHILD_CHAIN_MANAGER.address
-  );
 };
 
 export default func;
 func.tags = ['PolygonAvatar', 'PolygonAvatar_deploy'];
-func.dependencies = ['Avatar', 'CHILD_CHAIN_MANAGER', 'TRUSTED_FORWARDER'];
-func.skip = skipUnlessTestOrL2;
+func.dependencies = ['CHILD_CHAIN_MANAGER', 'TRUSTED_FORWARDER'];
+func.skip = skipUnlessTestnet;
