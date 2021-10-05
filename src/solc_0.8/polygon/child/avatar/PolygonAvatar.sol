@@ -5,19 +5,24 @@ pragma solidity 0.8.2;
 import {AvatarBase} from "../../../avatar/AvatarBase.sol";
 import {IAvatarMinter} from "../../../common/interfaces/IAvatarMinter.sol";
 import {Upgradeable} from "../../../common/BaseWithStorage/Upgradeable.sol";
+import {IChildToken} from "../../../common/interfaces/@maticnetwork/pos-portal/child/ChildToken/IChildToken.sol";
 
 /// @title This contract is a erc 721 compatible NFT token that represents an avatar and can be minted by a minter role.
 /// @dev This contract support meta transactions.
+/// @dev Avatar will be minted only on L2 (using the sale contract) and can be transferred to L1 but not minted on L1.
 /// @dev This contract is final, don't inherit form it.
-contract PolygonAvatar is AvatarBase, Upgradeable {
-    event Deposit(address indexed token, address indexed from, uint256 tokenId);
-    event Withdraw(address indexed token, address indexed from, uint256 tokenId);
+contract PolygonAvatar is AvatarBase, Upgradeable, IChildToken {
+    event DepositBatch(address indexed from, uint256[] tokenIds);
+    // This is not part of the interface, but it seems that this specific event is necessary!!!.
+    event WithdrawnBatch(address indexed user, uint256[] tokenIds);
 
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant CHILD_MANAGER_ROLE = keccak256("CHILD_MANAGER_ROLE");
-    address public l1TokenAddress;
+    // We only mint on L2, then it make sense to keep track of tokens transferred to L1
+    // to avoid minting them twice.
+    mapping(uint256 => bool) public withdrawnTokens;
 
     function initialize(
-        address l1TokenAddress_,
         string memory name_,
         string memory symbol_,
         string memory baseTokenURI_,
@@ -30,31 +35,95 @@ contract PolygonAvatar is AvatarBase, Upgradeable {
         __AvatarBase_init_unchained(defaultAdmin_, baseTokenURI_);
         __ERC721_init_unchained(name_, symbol_);
         __ERC2771Handler_initialize(trustedForwarder_);
-        l1TokenAddress = l1TokenAddress_;
     }
 
-    /// @notice Deposit tokens
-    /// @param user address for deposit
-    ///  @param tokenId tokenId to mint to user's account
-    function deposit(address user, uint256 tokenId) public {
+    /**
+     * @notice called when token is deposited on root chain
+     * @dev Should be callable only by ChildChainManager
+     * Should handle deposit by minting the required tokenId(s) for user
+     * Should set `withdrawnTokens` mapping to `false` for the tokenId being deposited
+     * Minting can also be done by other functions
+     * @param user user address for whom deposit is being done
+     * @param depositData abi encoded tokenIds. Batch deposit also supported.
+     */
+    function deposit(address user, bytes calldata depositData) external override {
         require(hasRole(CHILD_MANAGER_ROLE, _msgSender()), "!CHILD_MANAGER_ROLE");
         require(user != address(0x0), "invalid user");
-        _mint(user, tokenId);
-        emit Deposit(l1TokenAddress, user, tokenId);
+        if (depositData.length == 32) {
+            // deposit single
+            uint256 tokenId = abi.decode(depositData, (uint256));
+            _deposit(user, tokenId);
+        } else {
+            // deposit batch
+            uint256[] memory tokenIds = abi.decode(depositData, (uint256[]));
+            for (uint256 i; i < tokenIds.length; i++) {
+                _deposit(user, tokenIds[i]);
+            }
+            emit DepositBatch(user, tokenIds);
+        }
     }
 
     /// @notice Withdraw tokens
     /// @param tokenId tokenId of the token to be withdrawn
     function withdraw(uint256 tokenId) public payable {
-        require(ownerOf(tokenId) == _msgSender(), "Not owner");
-        _burn(tokenId);
-        emit Withdraw(l1TokenAddress, _msgSender(), tokenId);
+        _withdraw(tokenId);
     }
 
-    /// @dev Change layer1 token address
-    /// @param l1TokenAddress_ The new l1TokenAddress
-    function setL1TokenAddress(address l1TokenAddress_) external {
-        require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), "must have admin role");
-        l1TokenAddress = l1TokenAddress_;
+    /**
+     * @notice called when user wants to withdraw multiple tokens back to root chain
+     * @dev Should burn user's tokens. This transaction will be verified when exiting on root chain
+     * @param tokenIds tokenId list to withdraw
+     */
+    function withdrawBatch(uint256[] calldata tokenIds) external {
+        // Iteratively burn ERC721 tokens, for performing batch withdraw
+        for (uint256 i; i < tokenIds.length; i++) {
+            _withdraw(tokenIds[i]);
+        }
+        // At last emit this event, which will be used
+        // in MintableERC721 predicate contract on L1
+        // while verifying burn proof
+        emit WithdrawnBatch(_msgSender(), tokenIds);
+    }
+
+    /**
+     * @dev Creates a new token for `to`. Its token ID will be automatically
+     * assigned (and available on the emitted {IERC721-Transfer} event), and the token
+     * URI autogenerated based on the base URI passed at construction.
+     *
+     * See {ERC721-_mint}.
+     *
+     * Requirements:
+     *
+     * - the caller must have the `MINTER_ROLE`.
+     */
+    function mint(address to, uint256 id) external virtual override {
+        require(hasRole(MINTER_ROLE, _msgSender()), "must have minter role");
+        require(!withdrawnTokens[id], "TOKEN_EXISTS_ON_ROOT_CHAIN");
+        _mint(to, id);
+    }
+
+    /**
+     * @dev We don't implement {IMintableERC721-exists} but this one is a nice to have.
+     */
+    function exists(uint256 tokenId) external view virtual returns (bool) {
+        return _exists(tokenId);
+    }
+
+    /// @notice Deposit tokens
+    /// @param user address for deposit
+    /// @param tokenId tokenId to mint to user's account
+    function _deposit(address user, uint256 tokenId) internal {
+        // We only accept tokens that were minted on L1, withdrawn and now came from L1
+        require(withdrawnTokens[tokenId], "TOKEN_NOT_EXISTS_ON_ROOT_CHAIN");
+        withdrawnTokens[tokenId] = false;
+        _mint(user, tokenId);
+    }
+
+    /// @notice Withdraw tokens
+    /// @param tokenId tokenId of the token to be withdrawn
+    function _withdraw(uint256 tokenId) internal {
+        require(ownerOf(tokenId) == _msgSender(), "Not owner");
+        withdrawnTokens[tokenId] = true;
+        _burn(tokenId);
     }
 }
