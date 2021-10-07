@@ -4,6 +4,7 @@
 pragma solidity 0.8.2;
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "../../../common/BaseWithStorage/ERC721BaseToken.sol";
+import "../../../common/Base/TheSandbox712.sol";
 
 contract PolygonLandBaseToken is Initializable, ERC721BaseToken {
     using AddressUpgradeable for address;
@@ -217,7 +218,7 @@ contract PolygonLandBaseToken is Initializable, ERC721BaseToken {
         _numNFTPerAddress[from] -= numTokensTransfered;
         _numNFTPerAddress[to] += numTokensTransfered;
 
-        if (to.isContract() && _checkInterfaceWith10000Gas(to, ERC721_MANDATORY_RECEIVER)) {
+        /*if (to.isContract() && _checkInterfaceWith10000Gas(to, ERC721_MANDATORY_RECEIVER)) {
             uint256[] memory ids = new uint256[](numTokensTransfered);
             uint256 counter = 0;
             for (uint256 j = 0; j < sizes.length; j++) {
@@ -231,7 +232,118 @@ contract PolygonLandBaseToken is Initializable, ERC721BaseToken {
                 _checkOnERC721BatchReceived(_msgSender(), from, to, ids, data),
                 "erc721 batch transfer rejected by to"
             );
+        }*/
+
+        _checkInterface(numTokensTransfered, from, to, sizes, xs, ys, data);
+    }
+
+    function _checkInterface(
+        uint256 numTokensTransfered,
+        address from,
+        address to,
+        uint256[] calldata sizes,
+        uint256[] calldata xs,
+        uint256[] calldata ys,
+        bytes calldata data
+    ) internal {
+        if (to.isContract() && _checkInterfaceWith10000Gas(to, ERC721_MANDATORY_RECEIVER)) {
+            uint256[] memory ids = new uint256[](numTokensTransfered);
+            uint256 counter = 0;
+            for (uint256 j = 0; j < sizes.length; j++) {
+                uint256 size = sizes[j];
+                for (uint256 i = 0; i < size * size; i++) {
+                    ids[counter] = _idInPath(i, size, xs[j], ys[j]);
+                    counter++;
+                }
+            }
+            require(
+                _checkOnERC721BatchReceived(
+                    /*metaTx ? from : msg.sender*/
+                    from,
+                    from,
+                    to,
+                    ids,
+                    data
+                ),
+                "erc721 batch transfer rejected by to"
+            );
         }
+    }
+
+    function calculateDigest(
+        address from,
+        address to,
+        uint256[] calldata sizes,
+        uint256[] calldata xs,
+        uint256[] calldata ys,
+        bytes calldata data
+    ) internal returns (bytes32) {
+        return
+            keccak256(
+                abi.encodePacked(
+                    "\x19\x01",
+                    _DOMAIN_SEPARATOR,
+                    keccak256(
+                        abi.encode(
+                            keccak256(
+                                "batchTransferQuadII(address from, address to, uint256[] calldata sizes, uint256[] calldata xs, uint256[] calldata ys, bytes calldata data,)"
+                            ),
+                            from,
+                            to,
+                            sizes,
+                            xs,
+                            ys,
+                            data /*, _nonces[owner]++, deadline*/
+                        )
+                    )
+                )
+            );
+    }
+
+    function batchTransferQuadII(
+        address from,
+        address to,
+        uint256[] calldata sizes,
+        uint256[] calldata xs,
+        uint256[] calldata ys,
+        bytes calldata data,
+        bytes memory signature /*uint8 v,
+        bytes32 r,
+        bytes32 s*/
+    ) external {
+        require(from != address(0), "from is zero address");
+        require(to != address(0), "can't send to zero address");
+        require(sizes.length == xs.length && xs.length == ys.length, "invalid data");
+
+        address recoveredAddress = ECDSA.recover(calculateDigest(from, to, sizes, xs, ys, data), signature);
+        require(recoveredAddress != address(0) && recoveredAddress == from, "INVALID_SIGNATURE");
+
+        //bool metaTx = msg.sender != from && isTrustedForwarder(msg.sender);
+
+        uint256 numTokensTransfered = 0;
+        for (uint256 i = 0; i < sizes.length; i++) {
+            //uint256 size = sizes[i];
+            _transferQuad(from, to, sizes[i], xs[i], ys[i]);
+            numTokensTransfered += sizes[i] * sizes[i];
+        }
+        _numNFTPerAddress[from] -= numTokensTransfered;
+        _numNFTPerAddress[to] += numTokensTransfered;
+
+        /*if (to.isContract() && _checkInterfaceWith10000Gas(to, ERC721_MANDATORY_RECEIVER)) {
+            uint256[] memory ids = new uint256[](numTokensTransfered);
+            uint256 counter = 0;
+
+            for (uint256 j = 0; j < sizes.length; j++) {
+                //uint256 size = sizes[j];
+                for (uint256 i = 0; i < sizes[j] * sizes[j]; i++) {
+                    ids[counter] = _idInPath(i, sizes[j], xs[j], ys[j]);
+                    counter++;
+                }
+            }
+
+            require(_checkOnERC721BatchReceived(from, from, to, ids, data), "erc721 batch transfer rejected by to");
+        }*/
+        _checkInterface(numTokensTransfered, from, to, sizes, xs, ys, data);
     }
 
     function transferQuad(
