@@ -12,7 +12,7 @@ const func: DeployFunction = async function (
     sandboxAccount,
   } = await getNamedAccounts();
 
-  const avatarContract = await deployments.get('PolygonAvatar');
+  const avatarSaleContract = await deployments.get('PolygonAvatarSale');
   const adminRole = sandAdmin;
 
   // Grant roles.
@@ -22,7 +22,7 @@ const func: DeployFunction = async function (
     {from: adminRole, log: true},
     'grantRole',
     minterRole,
-    avatarContract.address
+    avatarSaleContract.address
   );
 
   const signerRole = await deployments.read('PolygonAvatarSale', 'SIGNER_ROLE');
