@@ -30,6 +30,7 @@ export const setupEstate = deployments.createFixture(async function () {
   const landContractAsMinter = await landContract.connect(
     ethers.provider.getSigner(minter)
   );
+
   const gameTokenAsAdmin = await ethers.getContract(
     'ChildGameToken',
     gameTokenAdmin
