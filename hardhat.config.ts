@@ -264,10 +264,6 @@ const config: HardhatUserConfig = {
           }
         : undefined,
       deploy: ['deploy_polygon', 'deploy'],
-      companionNetworks: {
-        l1: 'hardhat',
-        l2: 'hardhat',
-      },
       // deploy: ['deploy-for-test', 'deploy'],
       companionNetworks: {
         l1: 'hardhat',
@@ -312,9 +308,6 @@ const config: HardhatUserConfig = {
         l2: 'mumbai',
       },
       // gasPrice: 600000000000, // Uncomment in case of pending txs, and adjust gas
-      companionNetworks: {
-        l2: 'mumbai',
-      },
     },
     mainnet: {
       url: node_url('mainnet'),
