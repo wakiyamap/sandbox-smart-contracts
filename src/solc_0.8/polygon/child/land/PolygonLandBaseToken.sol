@@ -4,7 +4,6 @@
 pragma solidity 0.8.2;
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "../../../common/BaseWithStorage/ERC721BaseToken.sol";
-import "@openzeppelin/contracts-0.8/access/AccessControl.sol";
 
 contract PolygonLandBaseToken is Initializable, ERC721BaseToken {
     using AddressUpgradeable for address;
@@ -17,8 +16,6 @@ contract PolygonLandBaseToken is Initializable, ERC721BaseToken {
     uint256 internal constant LAYER_6x6 = 0x0200000000000000000000000000000000000000000000000000000000000000;
     uint256 internal constant LAYER_12x12 = 0x0300000000000000000000000000000000000000000000000000000000000000;
     uint256 internal constant LAYER_24x24 = 0x0400000000000000000000000000000000000000000000000000000000000000;
-
-    bytes32 public constant TRANSFER_ROLE = keccak256("TRANSFER_ROLE");
 
     /**
      * @notice Return the name of the token contract
@@ -105,7 +102,7 @@ contract PolygonLandBaseToken is Initializable, ERC721BaseToken {
      * @param id The id of the interface
      * @return True if the interface is supported
      */
-    function supportsInterface(bytes4 id) public pure override(AccessControl, ERC721BaseToken) returns (bool) {
+    function supportsInterface(bytes4 id) public pure override returns (bool) {
         return id == 0x01ffc9a7 || id == 0x80ac58cd || id == 0x5b5e139f;
     }
 
