@@ -311,14 +311,19 @@ async function build(event: any) {
     Infinity,
     [event.receipt]
   )) as any;
-  const blockTxns = [];
-  for (let i = 0; i < event.block.transactions.length; i++) {
-    const tx = await ethers.provider.getTransaction(
-      event.block.transactions[i]
-    );
-    blockTxns.push(tx);
-  }
-  event.block.transactions = blockTxns;
+  // const blockTxns = [];
+  // for (let i = 0; i < event.block.transactions.length; i++) {
+  //   try {
+  //     const tx = await ethers.provider.getTransaction(
+  //       event.block.transactions[i].hash
+  //     );
+  //     blockTxns.push(tx);
+  //   } catch (err) {
+  //     console.error(err);
+  //     throw new Error('Failed to get transaction');
+  //   }
+  // }
+  // event.block.transactions;
   const txProof = (await ProofsUtil.getTxProof(event.tx, event.block)) as any;
   // console.log('TX PROOF');
   // console.log(txProof);

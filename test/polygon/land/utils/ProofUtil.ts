@@ -241,6 +241,7 @@ export default class ProofsUtil {
       await new Promise((resolve, reject) => {
         txTrie.put(path, rawSignedSiblingTx, (err) => {
           if (err) {
+            console.error(err);
             reject(err);
           } else {
             resolve({});
@@ -255,10 +256,12 @@ export default class ProofsUtil {
         rlp.encode(tx.transactionIndex),
         (err, rawTxNode, reminder, stack) => {
           if (err) {
+            console.error(err);
             return reject(err);
           }
 
           if (reminder.length > 0) {
+            console.error('Node does not contain the key');
             return reject(new Error('Node does not contain the key'));
           }
 
@@ -275,15 +278,15 @@ export default class ProofsUtil {
     });
   }
 
-  static getTxBytes(tx) {
-    const txObj = new EthereumTx(ProofsUtil.squanchTx(tx));
+  static getTxBytes(tx_1) {
+    const txObj = new EthereumTx(ProofsUtil.squanchTx(tx_1));
     return txObj.serialize();
   }
 
   static squanchTx(tx) {
-    tx.gasPrice = '0x' + parseInt(tx.gasPrice).toString(16);
-    tx.value = '0x' + parseInt(tx.value).toString(16) || '0';
-    tx.gas = '0x' + parseInt(tx.gas).toString(16);
+    // tx.gasPrice = '0x' + parseInt(tx.gasPrice).toString(16);
+    tx.value = tx.value ? tx.value : '0';
+    // tx.gas = '0x' + parseInt(tx.gas).toString(16);
     tx.data = tx.input;
     return tx;
   }
