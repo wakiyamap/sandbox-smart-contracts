@@ -6,6 +6,7 @@ import EthereumTx from 'ethereumjs-tx';
 import * as ethUtils from 'ethereumjs-util-0.5';
 import MerkleTree from './MerkleTree';
 import EthereumBlock from 'ethereumjs-block/from-rpc';
+import {Block} from '@ethereumjs/block';
 console.log(ethUtils);
 const rlp = ethUtils.rlp;
 
@@ -291,8 +292,12 @@ export default class ProofsUtil {
     if (typeof _block.difficulty !== 'string') {
       _block.difficulty = '0x' + _block.difficulty.toString(16);
     }
-    const block = new EthereumBlock(_block);
-    return block.header;
+    try {
+      const block = new Block(_block);
+      return block.header;
+    } catch (err) {
+      console.error(err);
+    }
   }
 
   static async getReceiptProof(
@@ -334,6 +339,7 @@ export default class ProofsUtil {
       await new Promise((resolve, reject) => {
         receiptsTrie.put(path, rawReceipt, (err) => {
           if (err) {
+            console.error(err);
             reject(err);
           } else {
             resolve({});
@@ -348,6 +354,7 @@ export default class ProofsUtil {
         rlp.encode(receipt.transactionIndex),
         (err, rawReceiptNode, reminder, stack) => {
           if (err) {
+            console.error(err);
             return reject(err);
           }
 
@@ -355,12 +362,17 @@ export default class ProofsUtil {
             return reject(new Error('Node does not contain the key'));
           }
 
+          const encodedBlockHash = ethUtils.toBuffer(receipt.blockHash);
+          const encodedParentNodes = stack.map((s) => s.raw);
+          const rootNode = ProofsUtil.getRawHeader(block).receiptTrie;
+          const encodedPath = rlp.encode(receipt.transactionIndex);
+          const encodedValue = rlp.decode(rawReceiptNode.value);
           const prf = {
-            blockHash: ethUtils.toBuffer(receipt.blockHash),
-            parentNodes: stack.map((s) => s.raw),
-            root: ProofsUtil.getRawHeader(block).receiptTrie,
-            path: rlp.encode(receipt.transactionIndex),
-            value: rlp.decode(rawReceiptNode.value),
+            blockHash: encodedBlockHash,
+            parentNodes: encodedParentNodes,
+            root: rootNode,
+            path: encodedPath,
+            value: encodedValue,
           };
           resolve(prf);
         }
@@ -377,7 +389,7 @@ export default class ProofsUtil {
             : '0x'
           : receipt.root
       ),
-      ethUtils.toBuffer(receipt.cumulativeGasUsed),
+      ethUtils.toBuffer(receipt.cumulativeGasUsed._hex),
       ethUtils.toBuffer(receipt.logsBloom),
       // encoded log array
       receipt.logs.map((l) => {
