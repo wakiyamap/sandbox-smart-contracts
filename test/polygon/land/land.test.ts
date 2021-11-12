@@ -1,9 +1,10 @@
 import {ethers} from 'hardhat';
 import {expect} from '../../chai-setup';
 import {setupLand} from './fixtures';
-import {bufferToHex, rlp} from 'ethereumjs-util';
+import {bufferToHex, rlp, BN} from 'ethereumjs-util';
 // @ts-ignore
 import MerkleTree from './utils/merkle-tree';
+import ProofsUtil from './utils/ProofUtil';
 import {
   getTxBytes,
   getReceiptBytes,
@@ -249,11 +250,19 @@ describe('PolygonLand.sol', function () {
 
         // Emulate Checkpoint
         const block = await ethers.provider.getBlock(tx.blockHash);
+        const bn = ethers.utils.hexValue(block.number);
+        const blockData = await ethers.provider.send('eth_getBlockByNumber', [
+          bn,
+          true,
+        ]);
+
+        // console.log(block, blockData);
         const event = {
           tx,
           receipt,
-          block,
+          block: blockData,
         };
+
         const checkpointData = await build(event);
         const root = bufferToHex(checkpointData.header.root);
         await deployer.CheckpointManager.setCheckpoint(
@@ -290,15 +299,18 @@ describe('PolygonLand.sol', function () {
 });
 
 let headerNumber = 0;
-export async function build(event: any) {
-  const blockHeader = getBlockHeader(event.block);
+
+async function build(event: any) {
+  console.log(event.block);
+  const blockHeader = ProofsUtil.getBlockHeader(event.block);
   const tree = new MerkleTree([blockHeader]);
-  const receiptProof = await getReceiptProof(
+  const receiptProof = (await ProofsUtil.getReceiptProof(
     event.receipt,
     event.block,
     null /* web3 */,
+    Infinity,
     [event.receipt]
-  );
+  )) as any;
   const blockTxns = [];
   for (let i = 0; i < event.block.transactions.length; i++) {
     const tx = await ethers.provider.getTransaction(
@@ -307,9 +319,9 @@ export async function build(event: any) {
     blockTxns.push(tx);
   }
   event.block.transactions = blockTxns;
-  const txProof = await getTxProof(event.tx, event.block);
-  console.log('TX PROOF');
-  console.log(txProof);
+  const txProof = (await ProofsUtil.getTxProof(event.tx, event.block)) as any;
+  // console.log('TX PROOF');
+  // console.log(txProof);
   expect(verifyTxProof(receiptProof)).to.be.ok;
 
   headerNumber += 1;
@@ -319,9 +331,9 @@ export async function build(event: any) {
       root: tree.getRoot(),
       start: event.receipt.blockNumber,
     },
-    receipt: getReceiptBytes(event.receipt), // rlp encoded
+    receipt: ProofsUtil.getReceiptBytes(event.receipt), // rlp encoded
     receiptParentNodes: receiptProof.parentNodes,
-    tx: getTxBytes(event.tx), // rlp encoded
+    tx: ProofsUtil.getTxBytes(event.tx), // rlp encoded
     txParentNodes: txProof.parentNodes,
     path: Buffer.concat([Buffer.from('00', 'hex'), receiptProof.path]),
     number: event.receipt.blockNumber,
