@@ -3,6 +3,8 @@ import axios from 'axios';
 import BN from 'bn.js';
 import Trie from 'merkle-patricia-tree';
 import EthereumTx from 'ethereumjs-tx';
+import {Transaction} from '@ethereumjs/tx';
+
 import * as ethUtils from 'ethereumjs-util-0.5';
 import MerkleTree from './MerkleTree';
 import EthereumBlock from 'ethereumjs-block/from-rpc';
@@ -279,8 +281,14 @@ export default class ProofsUtil {
   }
 
   static getTxBytes(tx_1) {
-    const txObj = new EthereumTx(ProofsUtil.squanchTx(tx_1));
-    return txObj.serialize();
+    // const txObj = new Transaction(ProofsUtil.squanchTx(tx_1));
+    try {
+      const txObj = new EthereumTx(ProofsUtil.squanchTx(tx_1));
+      return txObj.serialize();
+    } catch (err) {
+      console.error(err);
+      throw new Error('getTxBytes error');
+    }
   }
 
   static squanchTx(tx) {

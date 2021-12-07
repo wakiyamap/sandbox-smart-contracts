@@ -239,6 +239,15 @@ describe('PolygonLand.sol', function () {
           PolygonLandTunnel.address,
           true
         );
+        await landHolder.Land.transferQuad(
+          landHolder.address,
+          PolygonLandTunnel.address,
+          size,
+          x,
+          y,
+          bytes
+        );
+
         const tx = await landHolder.PolygonLandTunnel.transferQuadToL1(
           landHolder.address,
           size,
