@@ -33,9 +33,6 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
 
     // gamesToLands key = gameId, value = landIds
     mapping(uint256 => EnumerableSet.UintSet) internal gamesToLands;
-    //yes we can have multiple lands per games
-    //I wonder why use sets
-    //what's the impact on gas
 
     LandToken internal _land;
     GameBaseToken internal _gameToken;
@@ -53,8 +50,8 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         uint256[] gameIds;
     }
 
-    //this is a new struct that I was working for the update
-    //landAndGameAssociations would be the landid and the corresponding gameId
+    /// @dev struct used for an update with multiple changes
+    /// @dev gameIdsToReuse should be the first n gameIds from landAndGameAssociationsToRemove for minimum gas consumption
     struct UpdateEstateData {
         uint256[][] landAndGameAssociationsToAdd;
         uint256[][] landAndGameAssociationsToRemove;
@@ -104,65 +101,6 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         emit EstateTokenUpdated(0, estateId, creation);
         return estateId;
     }
-
-    //this is the update function that I was working on, it is still incomplete
-    /* function updateEstate(
-        address from,
-        address to,
-        uint256 estateId,
-        UpdateEstateData memory update
-    ) external returns (uint256) {
-        _check_hasOwnerRights(from, estateId);
-        uint256 storageId = _storageId(estateId);
-        _metaData[storageId] = update.uri;
-        _check_authorized(from, ADD);
-
-        if (update.landAndGameAssociations.length > 0) {
-            uint256[] memory landsToAdd = new uint256[](update.landAndGameAssociations.length);
-            // uint256[] memory gamesToAdd = new uint256[](update.landAndGameAssociations.length); //this shoukd be a =/= size
-            (
-                landsToAdd //, gamesToAdd
-            ) = compareAndAdd(storageId, update.landAndGameAssociations);
-            //need to implement this
-
-            if (landsToAdd.length > 0) {
-                _land.batchTransferFrom(from, address(this), landsToAdd, "");
-            }
-            if (update.gameIdsToAdd.length > 0) {
-                //uint256[] memory filteredGames = filterArray(gamesToAdd);
-                _gameToken.batchTransferFrom(from, address(this), update.gameIdsToAdd, "");
-            }
-        }
-
-        if (update.gameIdsToRemove.length > 0) {
-            _removeGamesAndLands(storageId, update.landIdsToRemove, update.gameIdsToRemove);
-            //_gameToken.batchTransferFrom(address(this), from, update.gameIdsToRemove, "");
-        }
-
-        if (update.landIdsToRemove.length > 0) {
-            //Verify that we're not leaving unlinked games
-
-            //uint256[] memory gameIdsToRemove;
-            //(gameIdsToRemove, ) = _setGamesOfLands(storageId, landsToRemove, new uint256[](landsToRemove.length), true);
-
-            //if (!isBurned(estateId)) {
-            //for (uint256 j = 0; j < gameIdsToRemove.length; j++) {
-            //require(gamesToLands[gameIdsToRemove[j]].length() == 0, "GAME_IS_ATTACHED_TO_OTHER_LANDS");
-            //}
-            //}
-
-            _gameToken.batchTransferFrom(from, address(this), update.gameIdsToAdd, "");
-            _land.batchTransferFrom(address(this), from, update.landIdsToRemove, "");
-        }
-
-        uint256 newId = _incrementTokenVersion(to, estateId);
-        console.log("what is old estate id here ");
-        console.log(estateId);
-        console.log("what is new estate id here ");
-        console.log(newId);
-        emit EstateTokenUpdatedII(estateId, newId, update);
-        return newId;
-    } */
 
     function updateEstateV2(
         address from,
