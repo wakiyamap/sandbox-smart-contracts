@@ -7,6 +7,7 @@ import '@openzeppelin/hardhat-upgrades';
 import 'solidity-coverage';
 import 'hardhat-contract-sizer';
 import '@nomiclabs/hardhat-etherscan';
+import 'hardhat-deploy-tenderly';
 import {accounts, node_url} from './utils/network';
 
 const config: HardhatUserConfig = {
@@ -317,6 +318,10 @@ const config: HardhatUserConfig = {
     : undefined,
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY || '',
+  },
+  tenderly: {
+    project: 'the-sandbox',
+    username: 'TSB',
   },
 };
 
