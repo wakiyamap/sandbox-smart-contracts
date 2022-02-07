@@ -1,5 +1,5 @@
 import {DeployFunction} from 'hardhat-deploy/types';
-import {skipUnlessTest} from '../../utils/network';
+import {skipUnlessTest, skipUnlessTestnet} from '../../utils/network';
 
 const func: DeployFunction = async function (hre) {
   const {deployments, getNamedAccounts} = hre;
@@ -13,14 +13,14 @@ const func: DeployFunction = async function (hre) {
   }
 
   const isSuperOperator = await read(
-    'Asset',
+    'PolygonAsset',
     'isSuperOperator',
     gameToken.address
   );
 
   if (!isSuperOperator) {
     await execute(
-      'Asset',
+      'PolygonAsset',
       {from: assetAdmin, log: true},
       'setSuperOperator',
       gameToken.address,
@@ -31,6 +31,6 @@ const func: DeployFunction = async function (hre) {
 export default func;
 func.runAtTheEnd = true;
 func.tags = ['ChildGameToken', 'ChildGameToken_setup'];
-func.dependencies = ['Asset', 'ChildGameToken_deploy'];
+func.dependencies = ['PolygonAsset', 'ChildGameToken_deploy'];
 // TODO: Setup deploy-polygon folder and network.
-func.skip = skipUnlessTest; // TODO enable
+func.skip = skipUnlessTestnet; // TODO enable

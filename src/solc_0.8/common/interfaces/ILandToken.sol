@@ -27,7 +27,7 @@ interface LandToken {
         bytes calldata data
     ) external;
 
-    function x(uint256 id) external returns (uint256);
+    function getX(uint256 id) external view returns (uint256);
 
-    function y(uint256 id) external returns (uint256);
+    function getY(uint256 id) external view returns (uint256);
 }

@@ -96,7 +96,7 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         address to,
         EstateCRUDData calldata creation
     ) external returns (uint256) {
-        _check_authorized(from, ADD);
+        //_check_authorized(from, ADD);
         require(creation.landIds.length == creation.gameIds.length, "DIFFERENT_LENGTH_LANDS_GAMES");
         (uint256 estateId, uint256 storageId) = _mintEstate(from, to, _nextId++, 1, true);
         _metaData[storageId] = creation.uri;
@@ -114,7 +114,7 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         _check_hasOwnerRights(from, estateId);
         uint256 storageId = _storageId(estateId);
         _metaData[storageId] = update.uri;
-        _check_authorized(from, ADD);
+        //_check_authorized(from, ADD);
 
         uint256 gameToAddLength = update.landAndGameAssociationsToAdd[1].length;
         uint256 gameToRemoveLength = update.landAndGameAssociationsToRemove[1].length;
@@ -179,10 +179,10 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
     ) internal {
         require(landIdsToAdd.length > 0, "EMPTY_LAND_IDS_ARRAY");
 
-        (uint256[] memory sizes, uint256[] memory xs, uint256[] memory ys) = _separateId(landIdsToAdd);
+        //(uint256[] memory sizes, uint256[] memory xs, uint256[] memory ys) = _separateId(landIdsToAdd);
 
-        _land.batchTransferQuad(sender, address(this), sizes, xs, ys, "");
-
+        //_land.batchTransferQuad(sender, address(this), sizes, xs, ys, "");
+        _land.batchTransferFrom(sender, address(this), landIdsToAdd, "");
         _addLandsGamesAssociation(sender, storageId, landIdsToAdd, gameIds);
     }
 
@@ -299,7 +299,7 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
     /// @param id The token which will be burnt.
     function burn(uint256 id) public override {
         address sender = _msgSender();
-        _check_authorized(sender, BREAK);
+        //_check_authorized(sender, BREAK);
         _check_hasOwnerRights(sender, id);
         _burn(sender, _ownerOf(id), id);
     }
@@ -436,8 +436,8 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
 
         for (uint256 i = 0; i < numLds; i++) {
             sizes[i] = 1;
-            xs[i] = _land.x(landIds[i]);
-            ys[i] = _land.y(landIds[i]);
+            xs[i] = _land.getX(landIds[i]);
+            ys[i] = _land.getY(landIds[i]);
         }
         return (sizes, xs, ys);
     }

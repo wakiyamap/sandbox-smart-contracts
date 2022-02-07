@@ -172,8 +172,8 @@ contract EstateBaseToken2 is ImmutableERC721, Initializable, WithMinter {
 
         for (uint256 i = 0; i < numLds; i++) {
             sizes[i] = 1;
-            xs[i] = _land.x(landIds[i]);
-            ys[i] = _land.y(landIds[i]);
+            xs[i] = _land.getX(landIds[i]);
+            ys[i] = _land.getY(landIds[i]);
         }
         return (sizes, xs, ys);
     }

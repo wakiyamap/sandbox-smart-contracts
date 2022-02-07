@@ -1,11 +1,11 @@
 import {DeployFunction} from 'hardhat-deploy/types';
-import {skipUnlessTest} from '../../utils/network';
+import {skipUnlessTest, skipUnlessTestnet} from '../../utils/network';
 
 const func: DeployFunction = async function (hre) {
   const {deployments, getNamedAccounts} = hre;
   const {deploy} = deployments;
   const {deployer, gameTokenAdmin, upgradeAdmin} = await getNamedAccounts();
-  const assetContract = await deployments.get('Asset');
+  const assetContract = await deployments.get('PolygonAsset');
   const TRUSTED_FORWARDER = await deployments.get('TRUSTED_FORWARDER');
   const chainIndex = 1; // L2 (Polygon). Use 0 for Ethereum-Mainnet.
 
@@ -33,6 +33,6 @@ const func: DeployFunction = async function (hre) {
 
 export default func;
 func.tags = ['ChildGameToken', 'ChildGameToken_deploy'];
-func.dependencies = ['Asset_deploy', 'TRUSTED_FORWARDER'];
+func.dependencies = ['PolygonAsset_deploy', 'TRUSTED_FORWARDER'];
 // TODO: Setup deploy-polygon folder and network.
-func.skip = skipUnlessTest; // TODO enable
+func.skip = skipUnlessTestnet; // TODO enable

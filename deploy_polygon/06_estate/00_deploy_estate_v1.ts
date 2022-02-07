@@ -1,6 +1,6 @@
 import {HardhatRuntimeEnvironment} from 'hardhat/types';
 import {DeployFunction} from 'hardhat-deploy/types';
-import {skipUnlessTest} from '../../utils/network';
+import {skipUnlessTest, skipUnlessTestnet} from '../../utils/network';
 
 const func: DeployFunction = async function (
   hre: HardhatRuntimeEnvironment
@@ -9,13 +9,23 @@ const func: DeployFunction = async function (
   const {deployer, upgradeAdmin} = await getNamedAccounts();
   const {deploy} = deployments;
 
-  const landContract = await deployments.get('MockLandWithMint');
+  const landContract = await deployments.get('PolygonLand');
   const gameToken = await deployments.get('ChildGameToken');
+
+  /* if (hre.network.name === 'hardhat') {
+    // workaround for tests
+    landContract = await deployments.get('MockLandWithMint');
+  } else {
+    landContract = await deployments.get('PolygonLand');
+  } */
+
   const TRUSTED_FORWARDER = await deployments.get('TRUSTED_FORWARDER');
   const chainIndex = 1; // L2 (Polygon). Use 0 for Ethereum-Mainnet.
+
   await deploy('ChildEstateToken', {
     from: deployer,
     contract: 'ChildEstateTokenV1',
+    log: true,
     /*args: [
       TRUSTED_FORWARDER.address,
       landContract.address,
@@ -36,7 +46,6 @@ const func: DeployFunction = async function (
       },
       upgradeIndex: 0,
     },
-    log: true,
     skipIfAlreadyDeployed: true,
   });
 };
@@ -44,10 +53,11 @@ const func: DeployFunction = async function (
 export default func;
 func.tags = ['ChildEstateToken', 'ChildEstateToken_deploy'];
 func.dependencies = [
+  //'MockLandWithMint_deploy',
   'ChildGameToken_setup',
-  'Land_deploy',
+  'PolygonLand_deploy',
   'TRUSTED_FORWARDER',
-  'MockLandWithMint_deploy',
+  'PolygonLand_deploy',
 ];
-func.skip = skipUnlessTest;
+func.skip = skipUnlessTestnet;
 // TODO: Setup deploy-polygon folder and network.
