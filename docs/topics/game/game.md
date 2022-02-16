@@ -63,7 +63,7 @@ interface IGameToken{
     + setGameEditor(gameCreator,editor,isEditor)
     + isGameEditor(gameOwner,editor)
     + creatorOf(id)
-    + transferCreatorship(sender,original,to)
+    ' + transferCreatorship(sender,original,to)
     + name()
     + symbol()
     + tokenURI()
@@ -112,8 +112,8 @@ A game owner can call `GameMinter.updateGame` (which in turn will call `GameBase
 
 A game owner can burn his game token to recover the underlying assets that were attached to it. Recovering an asset means transferring the asset back to the game owner from the game contract.
 
-### Transfer creatorship
+<!-- ### Transfer creatorship
 
 When a game is created, the original creator of the game is stored in the first 20 bytes of the `gameId`.
 The creatorship of a specific game can be transferred to another account by calling `transferCreatorship`.
-This function can be called either by the current creator or by a super-operator nominated by him. The current creator of a game can be queried using a call to `creatorOf(uint256 id)`.
+This function can be called either by the current creator or by a super-operator nominated by him. The current creator of a game can be queried using a call to `creatorOf(uint256 id)`. -->

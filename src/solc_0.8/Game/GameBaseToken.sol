@@ -134,28 +134,6 @@ contract GameBaseToken is ImmutableERC721, WithMinter, Initializable, IGameToken
         _setGameEditor(gameOwner, editor, isEditor);
     }
 
-    /// @notice Transfers creatorship of `original` from `sender` to `to`.
-    /// @param gameId The current id of the GAME token.
-    /// @param sender The address of current registered creator.
-    /// @param to The address to transfer the creatorship to
-    function transferCreatorship(
-        uint256 gameId,
-        address sender,
-        address to
-    ) external override notToZero(to) {
-        require(_ownerOf(gameId) != address(0), "NONEXISTENT_TOKEN");
-        uint256 id = _storageId(gameId);
-        address msgSender = _msgSender();
-        require(msgSender == sender || _superOperators[msgSender], "TRANSFER_ACCESS_DENIED");
-        require(sender != address(0), "NOT_FROM_ZEROADDRESS");
-        address originalCreator = address(uint160(id / CREATOR_OFFSET_MULTIPLIER));
-        address current = creatorOf(gameId);
-        require(current != to, "CURRENT_=_TO");
-        require(current == sender, "CURRENT_!=_SENDER");
-        _creatorship[id] = to;
-        emit CreatorshipTransfer(originalCreator, current, to);
-    }
-
     /// @notice Burn a GAME token and recover assets.
     /// @param from The address of the one destroying the game.
     /// @param to The address to send all GAME assets to.
