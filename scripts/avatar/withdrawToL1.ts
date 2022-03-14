@@ -20,7 +20,7 @@ async function main() {
   const tokenId = BigNumber.from(processArgs.token);
 
   const avatarContract = await ethers.getContract('PolygonAvatar', wallet);
-  console.log('calling withdraw');
+  console.log('calling avatarContract.withdraw');
   const withdrawTx = await avatarContract.withdraw(tokenId);
   const withdrawTxResult = await withdrawTx.wait();
   console.log('withdraw result', withdrawTxResult);

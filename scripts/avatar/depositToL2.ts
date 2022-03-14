@@ -39,7 +39,7 @@ async function main() {
     const approveTxResult = await approveTx.wait();
     console.log('approveTxResult', approveTxResult);
   }
-  console.log('Calling depositFor');
+  console.log('Calling rootChainManager.depositFor');
   const depositData = defaultAbiCoder.encode(['uint256'], [tokenId]);
   const depositForTx = await rootChainManager.depositFor(
     wallet.address,

@@ -87,7 +87,7 @@ async function main() {
     console.log('Approve result', approveTxResult);
   }
 
-  console.log('Calling execute');
+  console.log('Calling avatarSaleContract.execute');
   const executeTx = await avatarSaleContract.execute(...args);
   const executeTxResult = await executeTx.wait();
   console.log('Execute result', executeTxResult);
