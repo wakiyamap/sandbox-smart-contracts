@@ -12,9 +12,12 @@ import {IChildToken} from "../../../common/interfaces/@maticnetwork/pos-portal/c
 /// @dev Avatar will be minted only on L2 (using the sale contract) and can be transferred to L1 but not minted on L1.
 /// @dev This contract is final, don't inherit form it.
 contract PolygonAvatar is AvatarBase, Upgradeable, IChildToken {
+    event Deposit(address indexed from, uint256 tokenId);
     event DepositBatch(address indexed from, uint256[] tokenIds);
     // This is not part of the interface, but it seems that this specific event is necessary!!!.
     event WithdrawnBatch(address indexed user, uint256[] tokenIds);
+    event Withdrawn(address indexed user, uint256 tokenId);
+    event Minted(address indexed user, uint256 tokenId);
 
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant CHILD_MANAGER_ROLE = keccak256("CHILD_MANAGER_ROLE");
@@ -53,6 +56,7 @@ contract PolygonAvatar is AvatarBase, Upgradeable, IChildToken {
             // deposit single
             uint256 tokenId = abi.decode(depositData, (uint256));
             _deposit(user, tokenId);
+            emit Deposit(user, tokenId);
         } else {
             // deposit batch
             uint256[] memory tokenIds = abi.decode(depositData, (uint256[]));
@@ -67,6 +71,7 @@ contract PolygonAvatar is AvatarBase, Upgradeable, IChildToken {
     /// @param tokenId tokenId of the token to be withdrawn
     function withdraw(uint256 tokenId) public {
         _withdraw(tokenId);
+        emit Withdrawn(_msgSender(), tokenId);
     }
 
     /**
@@ -100,6 +105,7 @@ contract PolygonAvatar is AvatarBase, Upgradeable, IChildToken {
         require(hasRole(MINTER_ROLE, _msgSender()), "must have minter role");
         require(!withdrawnTokens[id], "TOKEN_EXISTS_ON_ROOT_CHAIN");
         _mint(to, id);
+        emit Minted(to, id);
     }
 
     /**

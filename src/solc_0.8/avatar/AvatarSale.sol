@@ -25,6 +25,8 @@ contract AvatarSale is
     ERC2771Handler,
     Upgradeable
 {
+    event Sold(address signer, address buyer, uint256 id, address seller, uint256 price);
+
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
     bytes32 public constant SELLER_ROLE = keccak256("SELLER_ROLE");
     bytes32 public constant MINT_TYPEHASH =
@@ -99,6 +101,7 @@ contract AvatarSale is
         avatarTokenAddress.mint(buyer, id);
         require(sandTokenAddress.transferFrom(buyer, address(this), price), "TransferFrom failed");
         require(sandTokenAddress.transfer(seller, price), "Transfer failed");
+        emit Sold(signer, buyer, id, seller, price);
     }
 
     function domainSeparator() external view returns (bytes32) {

@@ -6,11 +6,9 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {ContextUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {ERC721Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
-import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {ERC2771Handler} from "../common/BaseWithStorage/ERC2771Handler.sol";
 import {IAvatarMinter} from "../common/interfaces/IAvatarMinter.sol";
 
-/// @dev Storage layout for the Avatar contract.
 abstract contract AvatarBase is
     Initializable,
     ContextUpgradeable,
@@ -19,6 +17,9 @@ abstract contract AvatarBase is
     ERC2771Handler,
     IAvatarMinter
 {
+    // Just in case.
+    uint256[50] private __gap1;
+
     string public baseTokenURI;
 
     function __AvatarBase_init_unchained(address adminRole, string memory baseTokenURI_) internal initializer {
@@ -64,5 +65,5 @@ abstract contract AvatarBase is
     }
 
     // Just in case.
-    uint256[50] private __gap;
+    uint256[50] private __gap2;
 }
