@@ -191,8 +191,9 @@ const config: HardhatUserConfig = {
 
     landSaleAdmin: 'sandAdmin', // can enable currencies
     gameTokenAdmin: 'sandAdmin', // can set minter address
+    estateTokenAdmin: 'sandAdmin', //can set EstateMinter address and add super operators
     gameTokenFeeBeneficiary: 'treasury', // receives fees from GAME token  minting / Mods
-    estateAdmin: 'sandAdmin', // can add super operators and change admin
+    estateTokenFeeBeneficiary: 'treasury',
     P2PERC721SaleAdmin: 'sandAdmin', // can set fees
     backendReferralWallet: {
       // default is computed from private key:

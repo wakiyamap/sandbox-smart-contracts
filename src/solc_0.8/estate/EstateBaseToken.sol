@@ -10,11 +10,15 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "../common/Libraries/UintToUintMap.sol";
 import "../common/BaseWithStorage/WithMinter.sol";
 import "@openzeppelin/contracts-0.8/utils/structs/EnumerableSet.sol";
-import "hardhat/console.sol";
+import "../common/Base/TheSandbox712.sol";
+import "../common/Libraries/SigUtil.sol";
+import "../common/interfaces/IEstateMinter.sol";
+
+//import "hardhat/console.sol";
 
 /// @dev An updated Estate Token contract using a simplified verison of LAND with no Quads
 
-contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
+contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter, TheSandbox712, IEstateToken {
     using EnumerableMap for EnumerableMap.UintToUintMap;
     using EnumerableSet for EnumerableSet.UintSet;
     uint8 internal constant OWNER = 0;
@@ -24,6 +28,9 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
     uint16 internal constant GRID_SIZE = 408;
     uint64 internal _nextId; // max uint64 = 18,446,744,073,709,551,615
     mapping(uint256 => bytes32) internal _metaData;
+
+    bytes4 internal constant ERC721_RECEIVED = 0x150b7a02;
+    bytes4 internal constant ERC721_BATCH_RECEIVED = 0x4b808c46;
 
     // estates key = storageId
     // EnumerableMap.UintToUintMap keys = land ids
@@ -37,50 +44,30 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
     LandToken internal _land;
     GameBaseToken internal _gameToken;
 
-    /// @param landIds LAND tokenIds added, Games added, Games removed, uri
-    /// @param gameId Games added
-    /// @param uri ipfs hash (without the prefix, assume cidv1 folder)
-    struct EstateCRUDData {
-        uint256[] landIds;
-        uint256[] gameIds;
-        bytes32 uri;
-    }
-    struct EstateData {
-        uint256[] landIds;
-        uint256[] gameIds;
-    }
-
-    /// @dev struct used for an update with multiple changes
-    /// @dev gameIdsToReuse should be the first n gameIds from landAndGameAssociationsToRemove for minimum gas consumption
-    struct UpdateEstateData {
-        uint256[][] landAndGameAssociationsToAdd;
-        uint256[][] landAndGameAssociationsToRemove;
-        uint256[] gameIdsToReuse;
-        uint256[] landIdsToAdd;
-        uint256[] landIdsToRemove;
-        bytes32 uri;
-    }
+    /// @dev Emits when a estate is updated.
+    /// @param oldId The id of the previous erc721 ESTATE token.
+    /// @param newId The id of the newly minted token.
+    /// @param update The changes made to the Estate.
+    event EstateTokenUpdated(uint256 indexed oldId, uint256 indexed newId, IEstateToken.EstateCRUDData update);
 
     /// @dev Emits when a estate is updated.
     /// @param oldId The id of the previous erc721 ESTATE token.
     /// @param newId The id of the newly minted token.
     /// @param update The changes made to the Estate.
-    event EstateTokenUpdated(uint256 indexed oldId, uint256 indexed newId, EstateCRUDData update);
+    event EstateTokenUpdatedII(uint256 indexed oldId, uint256 indexed newId, IEstateToken.UpdateEstateData update);
 
-    /// @dev Emits when a estate is updated.
-    /// @param oldId The id of the previous erc721 ESTATE token.
-    /// @param newId The id of the newly minted token.
-    /// @param update The changes made to the Estate.
-    event EstateTokenUpdatedII(uint256 indexed oldId, uint256 indexed newId, UpdateEstateData update);
-
-    event EstateTokenUpdatedV3(uint256 indexed oldId, uint256 indexed newId, EstateData update);
+    event EstateTokenUpdatedV3(uint256 indexed oldId, uint256 indexed newId, IEstateToken.EstateData update);
 
     function initV1(
         address trustedForwarder,
+        address admin,
+        //address minter,
         LandToken land,
         GameBaseToken gameToken,
         uint8 chainIndex
     ) public initializer {
+        _admin = admin;
+        //_minter = minter;
         _gameToken = gameToken;
         _land = land;
         ERC721BaseToken.__ERC721BaseToken_initialize(chainIndex);
@@ -88,86 +75,66 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
 
     // @todo Add access-control: minter-only? could inherit WithMinter.sol, the game token creator is minter only
     /// @notice Create a new estate token with lands.
-    /// @param from The address of the one creating the estate.
-    /// @param to The address that will own the estate.
+    /* /// @param from The address of the one creating the estate.
+    /// @param to The address that will own the estate. */
     /// @param creation The data to use to create the estate.
     function createEstate(
         address from,
-        address to,
-        EstateCRUDData calldata creation
-    ) external returns (uint256) {
-        //_check_authorized(from, ADD);
-        require(creation.landIds.length == creation.gameIds.length, "DIFFERENT_LENGTH_LANDS_GAMES");
-        (uint256 estateId, uint256 storageId) = _mintEstate(from, to, _nextId++, 1, true);
+        /* address to, */
+        IEstateToken.EstateCRUDData calldata creation,
+        bytes calldata signature /* , uint256 timeStamp */
+    ) external override onlyMinter() returns (uint256) {
+        (uint256 estateId, uint256 storageId) =
+            _mintEstate(
+                from, /*, to*/
+                _nextId++,
+                1,
+                true
+            );
         _metaData[storageId] = creation.uri;
         _addLandsGames(from, storageId, creation.landIds, creation.gameIds);
         emit EstateTokenUpdated(0, estateId, creation);
         return estateId;
     }
 
-    function updateEstateV2(
+    function updateEstate(
         address from,
-        address to,
         uint256 estateId,
-        UpdateEstateData memory update
-    ) external returns (uint256) {
+        IEstateToken.UpdateEstateData memory update,
+        bytes calldata signature
+    ) external override returns (uint256) {
         _check_hasOwnerRights(from, estateId);
         uint256 storageId = _storageId(estateId);
+
         _metaData[storageId] = update.uri;
-        //_check_authorized(from, ADD);
 
         uint256 gameToAddLength = update.landAndGameAssociationsToAdd[1].length;
         uint256 gameToRemoveLength = update.landAndGameAssociationsToRemove[1].length;
-        uint256 gameIdsToReuseLength = update.gameIdsToReuse.length;
 
         /** add lands */
-        //what if there are no lands?
         _addLands(storageId, from, update.landIdsToAdd);
 
         /** remove association*/
         if (gameToRemoveLength > 0) {
-            console.log("we should be here");
             require(
                 gameToRemoveLength == update.landAndGameAssociationsToRemove[0].length,
                 "DIFFERENT_LENGTH_LANDS_GAMES"
             );
-            require(update.gameIdsToReuse.length <= gameToAddLength, "GAMES_TO_REUSE_MUST_BE_PRESENT_IN_GAMES_TO_ADD");
-            require(
-                update.gameIdsToReuse.length < gameToRemoveLength,
-                "GAMES_TO_REUSE_MUST_BE_PRESENT_IN_GAMES_TO_REMOVE"
-            );
-            for (uint256 i = 0; i < gameIdsToReuseLength; i++) {
-                require(
-                    update.gameIdsToReuse[i] == update.landAndGameAssociationsToAdd[1][i],
-                    "GAMES_TO_REUSE_MUST_BE_PRESENT_IN_GAMES_TO_ADD"
-                );
-            }
-            uint256 newLength = gameToRemoveLength - gameIdsToReuseLength;
-            uint256[] memory gamesToTransfer = new uint256[](newLength);
-            for (uint256 i = gameIdsToReuseLength; i < gameToRemoveLength; i++) {
-                gamesToTransfer[i - gameIdsToReuseLength] = update.landAndGameAssociationsToRemove[1][i];
-            } //there's a problem here, we're sending 0 games
 
-            _removeGamesOfLands(from, storageId, update.landAndGameAssociationsToRemove[1], gamesToTransfer);
+            _removeGamesOfLands(from, storageId, update.landAndGameAssociationsToRemove[1], update.gameIdsToRemove);
         }
 
         /** add association*/
         if (gameToAddLength > 0) {
             require(gameToAddLength == update.landAndGameAssociationsToAdd[0].length, "DIFFERENT_LENGTH_LANDS_GAMES");
-            _addLandsGamesAssociation(
-                from,
-                storageId,
-                update.landAndGameAssociationsToAdd[0],
-                update.landAndGameAssociationsToAdd[1]
-            );
+            _addLandsGamesAssociationUpdate(from, storageId, update.landAndGameAssociationsToAdd, update.gameIdsToAdd);
         }
 
         /** remove lands */
-        console.log("here we should enter remove lands");
         _removeLands(storageId, from, update.landIdsToRemove, false);
 
-        uint256 newId = _incrementTokenVersion(to, estateId);
-        EstateData memory estateState = getEstateData(storageId);
+        uint256 newId = _incrementTokenVersion(from, estateId);
+        IEstateToken.EstateData memory estateState = getEstateData(storageId);
         emit EstateTokenUpdatedII(estateId, newId, update);
     }
 
@@ -178,57 +145,105 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         uint256[] memory gameIds
     ) internal {
         require(landIdsToAdd.length > 0, "EMPTY_LAND_IDS_ARRAY");
-
-        //(uint256[] memory sizes, uint256[] memory xs, uint256[] memory ys) = _separateId(landIdsToAdd);
-
-        //_land.batchTransferQuad(sender, address(this), sizes, xs, ys, "");
         _land.batchTransferFrom(sender, address(this), landIdsToAdd, "");
+
         _addLandsGamesAssociation(sender, storageId, landIdsToAdd, gameIds);
     }
 
     function _addLandsGamesAssociation(
+        //maybe I can unify both with a bool isCreation
         address sender,
         uint256 storageId,
         uint256[] memory landIds,
         uint256[] memory gameIds
     ) internal {
-        //this was assuming that n lands = n games
-        uint256[] memory gamesToAdd = new uint256[](gameIds.length);
+        uint256[] memory uiniqueGameIds = new uint256[](gameIds.length);
+        uint256 numUniqueGames = 0;
+        bool onlyZeroes = true;
 
         for (uint256 i = 0; i < landIds.length; i++) {
             uint256 gameId = gameIds[i];
 
             (bool occupied, uint256 key) = estates[storageId].tryGet(landIds[i]);
-            console.log(key);
 
-            require(
-                (/* !occupied && */
-                key == 0),
-                "LAND_ALREADY_OCCUPIED"
-            );
+            require((key == 0), "LAND_ALREADY_OCCUPIED");
+
+            if (occupied) {
+                estates[storageId].remove(landIds[i]);
+                gamesToLands[gameId].remove(landIds[i]);
+            }
 
             estates[storageId].set(landIds[i], gameId);
             gamesToLands[gameId].add(landIds[i]);
 
-            if (gameId != 0) {
-                if (gameIds.length > 1) {
-                    if ((i == 0 || gameId != gameIds[i - 1]) && _gameToken.ownerOf(gameId) != address(this)) {
-                        gamesToAdd[i] = gameId;
+            if (gameIds.length > 1) {
+                if (gameId != 0) {
+                    if (
+                        (i == 0 || gameId != gameIds[i - 1]) &&
+                        _gameToken.ownerOf(gameId) != address(this) &&
+                        gameId != 0
+                    ) {
+                        onlyZeroes = false;
+                        uiniqueGameIds[numUniqueGames] = gameId;
+                        numUniqueGames++;
+                    } else {
+                        if (_gameToken.ownerOf(gameId) != address(this) && gameId != 0) {
+                            onlyZeroes = false;
+                            uiniqueGameIds[numUniqueGames] = gameId;
+                            numUniqueGames++;
+                        }
                     }
-                } else {
-                    if (_gameToken.ownerOf(gameId) != address(this)) {
-                        gamesToAdd[i] = gameId;
-                    }
+                }
+            } else {
+                if (gameId != 0) {
+                    onlyZeroes = false;
+                    uiniqueGameIds[numUniqueGames] = gameId;
+                    numUniqueGames++;
                 }
             }
         }
 
-        if (gamesToAdd.length > 0) {
-            console.log("inside _addLandsGamesAssociation ");
-            for (uint256 i = 0; i < gamesToAdd.length; i++) {
-                console.log(gamesToAdd[i]);
+        if (numUniqueGames != gameIds.length) {
+            uint256[] memory uiniqueGameArray = new uint256[](numUniqueGames);
+
+            for (uint256 i = 0; i < numUniqueGames; i++) {
+                uiniqueGameArray[i] = uiniqueGameIds[i];
             }
-            _gameToken.batchTransferFrom(sender, address(this), gamesToAdd, "");
+
+            if (!onlyZeroes) {
+                _gameToken.batchTransferFrom(sender, address(this), uiniqueGameArray, "");
+            }
+        } else {
+            _gameToken.batchTransferFrom(sender, address(this), gameIds, "");
+        }
+    }
+
+    function _addLandsGamesAssociationUpdate(
+        address sender,
+        uint256 storageId,
+        uint256[][] memory landAndGameAssociationsToAdd,
+        uint256[] memory gameIds
+    ) internal {
+        for (uint256 i = 0; i < landAndGameAssociationsToAdd[0].length; i++) {
+            uint256 gameId = landAndGameAssociationsToAdd[1][i];
+
+            (bool occupied, uint256 key) = estates[storageId].tryGet(landAndGameAssociationsToAdd[0][i]);
+
+            require((key == 0), "LAND_ALREADY_OCCUPIED");
+
+            if (occupied) {
+                //REMOVE 0
+                estates[storageId].remove(landAndGameAssociationsToAdd[0][i]);
+                gamesToLands[gameId].remove(landAndGameAssociationsToAdd[0][i]);
+            }
+
+            estates[storageId].set(landAndGameAssociationsToAdd[0][i], gameId);
+
+            gamesToLands[gameId].add(landAndGameAssociationsToAdd[0][i]);
+        }
+
+        if (gameIds.length > 0) {
+            _gameToken.batchTransferFrom(sender, address(this), gameIds, "");
         }
     }
 
@@ -238,22 +253,22 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         uint256[] memory gameAssociationsToRemove,
         uint256[] memory gameIdsToRemove
     ) internal {
-        console.log("do I enter here?");
-        console.log(gameAssociationsToRemove.length);
-        console.log(gameIdsToRemove.length);
         uint256[] memory landsFromGames;
 
         for (uint256 i = 0; i < gameAssociationsToRemove.length; i++) {
-            console.log("gameAssociationsToRemove");
-            console.log(gameAssociationsToRemove[i]);
-
             landsFromGames = getLandsForGame(gameAssociationsToRemove[i]);
-            delete (gamesToLands[gameAssociationsToRemove[i]]);
+
+            uint256 length = gamesToLands[gameAssociationsToRemove[i]].length();
+
+            for (uint256 j = 0; j < length; j++) {
+                uint256 toRemove = gamesToLands[gameAssociationsToRemove[i]].at(0); //it was j before
+                gamesToLands[gameAssociationsToRemove[i]].remove(toRemove);
+            }
+
             for (uint256 j = 0; j < landsFromGames.length; j++) {
                 estates[storageId].set(landsFromGames[j], 0);
             }
         }
-
         _gameToken.batchTransferFrom(address(this), from, gameIdsToRemove, "");
     }
 
@@ -277,19 +292,16 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         uint256[] memory landIdsToRemove,
         bool isBurned
     ) internal {
-        console.log("inside remove lalnds");
-
         uint256 len = landIdsToRemove.length;
         for (uint256 i = 0; i < len; i++) {
-            console.log(landIdsToRemove[i]);
             (bool occupied, uint256 key) = estates[storageId].tryGet(landIdsToRemove[i]);
-            console.log("Remove lands");
-            console.log(key);
+
             require(
                 /* !occupied */
                 isBurned || key == 0,
                 "GAME_STILL_HOLDS_A_LAND"
             );
+
             require(estates[storageId].remove(landIdsToRemove[i]), "LAND_DOES_NOT_EXIST");
         }
         _land.batchTransferFrom(address(this), from, landIdsToRemove, "");
@@ -334,42 +346,116 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
     // / @param num The number of Lands to transfer.
     /// @param estateId The estate to recover lands from.
     function transferFromBurnedEstate(
-        address sender,
-        address to,
+        //address sender,
+        //address to,
         uint256 estateId,
-        EstateData calldata associatioToRetrieve
+        IEstateToken.EstateData calldata associatioToRetrieve
     ) public {
+        address sender = _msgSender();
         require(isBurned(estateId), "ASSET_NOT_BURNED");
         require(sender != address(this), "NOT_FROM_THIS");
         uint256 storageId = _storageId(estateId);
-        address msgSender = _msgSender();
-        require(msgSender == sender || _superOperators[msgSender], "NOT_AUTHORIZED");
         _check_withdrawal_authorized(sender, estateId);
         //_removeLandsGames(to, estateId, landsToRemove);
-        _removeGamesOfLands(to, estateId, associatioToRetrieve.gameIds, associatioToRetrieve.gameIds);
-        _removeLands(storageId, to, associatioToRetrieve.landIds, true);
+        _removeGamesOfLands(sender, estateId, associatioToRetrieve.gameIds, associatioToRetrieve.gameIds);
+        _removeLands(storageId, sender, associatioToRetrieve.landIds, true);
     }
 
-    function getEstateData(uint256 estateId) public view returns (EstateData memory) {
+    function getEstateData(uint256 estateId) public view returns (IEstateToken.EstateData memory) {
         uint256 storageId = _storageId(estateId);
         uint256 length = estates[storageId].length();
-        console.log("length from estate data");
-        console.log(length);
+
         uint256[] memory landIds = new uint256[](length);
         uint256[] memory gameIds = new uint256[](length);
-        //if (!isBurned(estateId)) {
-        //console.log("do we enter the burned part for estate? ");
+
         for (uint256 i = 0; i < length; i++) {
             (uint256 landId, uint256 gameId) = estates[storageId].at(i);
             landIds[i] = landId;
             gameIds[i] = gameId;
         }
-        //}
-        return EstateData({landIds: landIds, gameIds: gameIds});
+
+        return IEstateToken.EstateData({landIds: landIds, gameIds: gameIds});
+    }
+
+    function getLands(uint256 estateId) public view returns (uint256[] memory) {
+        uint256 storageId = _storageId(estateId);
+        uint256 length = estates[storageId].length();
+
+        uint256[] memory landIds = new uint256[](length);
+        uint256[] memory uniqueLands = new uint256[](length);
+        uint256 uniqueNumber = 0;
+
+        if (length == 1) {
+            (uint256 landId, uint256 gameId) = estates[storageId].at(0);
+            landIds[0] = landId;
+            return landIds;
+        } else {
+            for (uint256 i = 0; i < length; i++) {
+                (uint256 landId, uint256 gameId) = estates[storageId].at(i);
+                landIds[i] = landId;
+                if (i == 0) {
+                    uniqueLands[uniqueNumber] = landId;
+                    uniqueNumber++;
+                } else {
+                    if (landId != landIds[i - 1]) {
+                        uniqueLands[uniqueNumber] = landId;
+                        uniqueNumber++;
+                    }
+                }
+            }
+            if (uniqueNumber != length) {
+                uint256[] memory filteredArray = new uint256[](uniqueNumber);
+                for (uint256 i = 0; i < uniqueNumber; i++) {
+                    filteredArray[i] = uniqueLands[i];
+                }
+                return filteredArray;
+            } else {
+                return landIds;
+            }
+        }
+    }
+
+    function getGames(uint256 estateId) public view returns (uint256[] memory) {
+        uint256 storageId = _storageId(estateId);
+        uint256 length = estates[storageId].length();
+
+        uint256[] memory gameIds = new uint256[](length);
+        uint256[] memory uniqueGames = new uint256[](length);
+        uint256 uniqueNumber = 0;
+
+        if (length == 1) {
+            (uint256 landId, uint256 gameId) = estates[storageId].at(0);
+            gameIds[0] = gameId;
+            return gameIds;
+        } else {
+            for (uint256 i = 0; i < length; i++) {
+                (uint256 landId, uint256 gameId) = estates[storageId].at(i);
+                gameIds[i] = gameId;
+                if (i == 0) {
+                    uniqueGames[uniqueNumber] = gameId;
+                    uniqueNumber++;
+                } else {
+                    if (gameId != gameIds[i - 1]) {
+                        uniqueGames[uniqueNumber] = gameId;
+                        uniqueNumber++;
+                    }
+                }
+            }
+            if (uniqueNumber != length) {
+                uint256[] memory filteredArray = new uint256[](uniqueNumber);
+                for (uint256 i = 0; i < uniqueNumber; i++) {
+                    filteredArray[i] = uniqueGames[i];
+                }
+                return filteredArray;
+            } else {
+                return gameIds;
+            }
+        }
     }
 
     function getLandsForGame(uint256 gameId) public view returns (uint256[] memory) {
         uint256[] memory landIds = new uint256[](gamesToLands[gameId].length());
+
         for (uint256 i = 0; i < gamesToLands[gameId].length(); i++) {
             landIds[i] = gamesToLands[gameId].at(i);
         }
@@ -398,22 +484,22 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         return _toFullURI(_metaData[immutableId]);
     }
 
-    function onERC721BatchReceived(
-        address, // operator,
-        address, // from,
-        uint256[] calldata, // ids,
-        bytes calldata // data
+    function onERC721Received(
+        address, /*operator*/
+        address, /*from*/
+        uint256, /*id*/
+        bytes calldata /*data*/
     ) external pure returns (bytes4) {
-        revert("please call createEstate or updateEstate functions");
+        return ERC721_RECEIVED;
     }
 
-    function onERC721Received(
-        address, // operator,
-        address, // from,
-        uint256, // tokenId,
-        bytes calldata // data
+    function onERC721BatchReceived(
+        address, /*operator*/
+        address, /*from*/
+        uint256[] calldata, /*ids*/
+        bytes calldata /*data*/
     ) external pure returns (bytes4) {
-        revert("please call createEstate or updateEstate functions");
+        return ERC721_BATCH_RECEIVED;
     }
 
     // //////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -450,29 +536,23 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
         address originalCreator = address(uint160(estateId / CREATOR_OFFSET_MULTIPLIER));
 
         uint64 subId = uint64(estateId / SUBID_MULTIPLIER);
-
         uint16 version = uint16(estateId);
-
         version++;
-
         address owner = _ownerOf(estateId);
 
         if (from == owner) {
             _burn(from, owner, estateId);
         }
 
-        (uint256 newId, ) = _mintEstate(originalCreator, owner, subId, version, false);
+        (uint256 newId, ) = _mintEstate(owner, subId, version, false);
 
         address newOwner = _ownerOf(newId);
-
         require(owner == newOwner, "NOT_OWNER");
-
         return newId;
     }
 
     /// @dev Create a new (or incremented) estateId and associate it with an owner.
-    /// @param from The address of one creating the Estate.
-    /// @param to The address of the Estate owner.
+    /// @param from The address of the Estate owner.
     /// @param subId The id to use when generating the new estateId.
     /// @param version The version number part of the estateId.
     /// @param isCreation Whether this is a brand new Estate (as opposed to an update).
@@ -480,12 +560,12 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
     /// @return storageId The staorage Id for the token.
     function _mintEstate(
         address from,
-        address to,
+        //address to,
         uint64 subId,
         uint16 version,
         bool isCreation
     ) internal returns (uint256, uint256 storageId) {
-        require(to != address(uint160(0)), "CAN'T_SEND_TO_ZERO_ADDRESS");
+        //require(to != address(uint160(0)), "CANNOT_SEND_TO_ZERO_ADDRESS");
         uint16 idVersion;
         uint256 estateId;
 
@@ -502,9 +582,9 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
             strgId = _storageId(estateId);
         }
 
-        _owners[strgId] = (uint256(idVersion) << 200) + uint256(uint160(to));
-        _numNFTPerAddress[to]++;
-        emit Transfer(address(0), to, estateId);
+        _owners[strgId] = (uint256(idVersion) << 200) + uint256(uint160(from));
+        _numNFTPerAddress[from]++;
+        emit Transfer(address(0), from, estateId);
         return (estateId, strgId);
     }
 
@@ -577,6 +657,16 @@ contract EstateBaseToken is ImmutableERC721, Initializable, WithMinter {
 
         return flag;
     }
+
+    //address private backAddress;
+
+    /* function setBackAddress(address wallet) public {
+        backAddress = wallet;
+    }
+
+    function getBackAddress() public view returns (address) {
+        return backAddress;
+    } */
 
     // solhint-enable code-complexity
 }

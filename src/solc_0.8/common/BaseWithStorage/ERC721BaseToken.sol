@@ -307,10 +307,6 @@ contract ERC721BaseToken is IERC721Upgradeable, WithSuperOperators, ERC2771Handl
         uint256 numTokens = ids.length;
         for (uint256 i = 0; i < ids.length; i++) {
             uint256 id = ids[i];
-            if (id == 0) {
-                numTokens--;
-                continue;
-            }
             (address owner, bool operatorEnabled) = _ownerAndOperatorEnabledOf(id);
             require(owner == from, "BATCHTRANSFERFROM_NOT_OWNER");
             require(authorized || (operatorEnabled && _operators[id] == msgSender), "NOT_AUTHORIZED");

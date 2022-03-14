@@ -27,6 +27,13 @@ interface LandToken {
         bytes calldata data
     ) external;
 
+    function safeBatchTransferFrom(
+        address from,
+        address to,
+        uint256[] calldata ids,
+        bytes calldata data
+    ) external;
+
     function getX(uint256 id) external view returns (uint256);
 
     function getY(uint256 id) external view returns (uint256);
