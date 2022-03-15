@@ -100,6 +100,6 @@
     "hardhat": "hardhat"
   },
   "dependencies": {
-    "@maticnetwork/maticjs": "^3.2.3"
+    "@maticnetwork/maticjs": "^2.0.29"
   }
 }
