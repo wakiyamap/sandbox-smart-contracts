@@ -13,7 +13,6 @@ const func: DeployFunction = async function (
   const adminRole = sandAdmin;
   await deployments.deploy('PolygonAvatarSale', {
     from: deployer,
-    contract: 'AvatarSale',
     log: true,
     skipIfAlreadyDeployed: true,
     proxy: {

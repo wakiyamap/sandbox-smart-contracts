@@ -7,7 +7,7 @@ export const avatarSaleSignature = async function (
   avatarSale: Contract,
   signer: string,
   buyer: string,
-  tokenId: BigNumberish,
+  tokenIds: BigNumberish[],
   seller: string,
   price: BigNumberish,
   privateKey = ''
@@ -37,7 +37,7 @@ export const avatarSaleSignature = async function (
       Mint: [
         {name: 'signer', type: 'address'},
         {name: 'buyer', type: 'address'},
-        {name: 'id', type: 'uint256'},
+        {name: 'ids', type: 'uint256[]'},
         {name: 'seller', type: 'address'},
         {name: 'price', type: 'uint256'},
       ],
@@ -52,7 +52,7 @@ export const avatarSaleSignature = async function (
     message: {
       signer: signer,
       buyer: buyer,
-      id: tokenId.toString(),
+      ids: tokenIds.map((x) => x.toString()),
       seller: seller,
       price: price.toString(),
     },

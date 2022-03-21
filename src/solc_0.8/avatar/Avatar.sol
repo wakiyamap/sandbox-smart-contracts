@@ -36,7 +36,7 @@ contract Avatar is AvatarBase, Upgradeable, IMintableERC721 {
      * @param to user address for whom token is being minted
      * @param id tokenId being minted
      */
-    function mint(address to, uint256 id) external virtual override(IAvatarMinter, IMintableERC721) {
+    function mint(address to, uint256 id) external override whenNotPaused {
         require(hasRole(MINTER_ROLE, _msgSender()), "must have minter role");
         _mint(to, id);
     }
@@ -56,7 +56,7 @@ contract Avatar is AvatarBase, Upgradeable, IMintableERC721 {
         address user,
         uint256 tokenId,
         bytes calldata metaData
-    ) external override {
+    ) external override whenNotPaused {
         require(hasRole(MINTER_ROLE, _msgSender()), "must have minter role");
         _safeMint(user, tokenId, metaData);
     }

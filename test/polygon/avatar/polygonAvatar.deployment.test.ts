@@ -128,7 +128,7 @@ describe('PolygonAvatar - Avatar deployment test', function () {
         this.l2.sale,
         this.l2.backendAuthWallet,
         this.buyer,
-        this.tokenId,
+        [this.tokenId],
         this.l2.sandboxAccount,
         this.price,
         this.l2.backendAuthEtherWallet.privateKey
@@ -140,7 +140,7 @@ describe('PolygonAvatar - Avatar deployment test', function () {
         s,
         this.l2.backendAuthWallet,
         this.buyer,
-        this.tokenId,
+        [this.tokenId],
         this.l2.sandboxAccount,
         this.price
       );

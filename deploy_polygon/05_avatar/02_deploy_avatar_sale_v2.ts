@@ -9,7 +9,6 @@ const func: DeployFunction = async function (
   const {deployer, upgradeAdmin} = await getNamedAccounts();
   await deployments.deploy('PolygonAvatarSale', {
     from: deployer,
-    contract: 'AvatarSale',
     log: true,
     skipIfAlreadyDeployed: true,
     proxy: {

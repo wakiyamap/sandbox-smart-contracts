@@ -1,7 +1,7 @@
 import {ethers} from 'hardhat';
 import {expect} from 'chai';
 import {solidityPack} from 'ethers/lib/utils';
-import {addMinter, setupAvatarTest} from './fixtures';
+import {addMinter, addPauser, setupAvatarTest} from './fixtures';
 
 describe('Avatar.sol', function () {
   describe('initialization', function () {
@@ -183,6 +183,97 @@ describe('Avatar.sol', function () {
         [txData.data, fixtures.other]
       );
       await avatarAsTrustedForwarder.signer.sendTransaction(txData);
+      expect(await fixtures.avatar.ownerOf(124)).to.be.equal(fixtures.dest);
+    });
+    describe('pauser role', function () {
+      it('pauser role is set', async function () {
+        const fixtures = await setupAvatarTest();
+        await addPauser(fixtures.adminRole, fixtures.avatar, fixtures.pauser);
+        const pauseRole = await fixtures.avatar.PAUSE_ROLE();
+        expect(await fixtures.avatar.hasRole(pauseRole, fixtures.pauser)).to.be
+          .true;
+      });
+      it('pauser can can pause', async function () {
+        const fixtures = await setupAvatarTest();
+        await addPauser(fixtures.adminRole, fixtures.avatar, fixtures.pauser);
+        const avatarAsPauser = await ethers.getContract(
+          'Avatar',
+          fixtures.pauser
+        );
+        expect(await avatarAsPauser.paused()).to.be.false;
+        await avatarAsPauser.pause();
+        expect(await avatarAsPauser.paused()).to.be.true;
+      });
+      it('other should fail to set pause', async function () {
+        const fixtures = await setupAvatarTest();
+        await expect(fixtures.avatar.pause()).to.revertedWith(
+          'must have pause role'
+        );
+      });
+    });
+  });
+  describe('pause/unpause', function () {
+    it('should fail to mint when paused', async function () {
+      const fixtures = await setupAvatarTest();
+
+      await addPauser(fixtures.adminRole, fixtures.avatar, fixtures.pauser);
+      const avatarAsPauser = await ethers.getContract(
+        'Avatar',
+        fixtures.pauser
+      );
+
+      await addMinter(fixtures.adminRole, fixtures.avatar, fixtures.minter);
+      const avatarAsMinter = await ethers.getContract(
+        'Avatar',
+        fixtures.minter
+      );
+
+      await avatarAsPauser.pause();
+
+      // Regular mint
+      await expect(
+        avatarAsMinter['mint(address,uint256)'](fixtures.other, 123)
+      ).to.revertedWith('paused');
+
+      // Mint with metadata
+      const metadata = ethers.utils.toUtf8Bytes('metadata');
+      await expect(
+        avatarAsMinter['mint(address,uint256,bytes)'](
+          fixtures.other,
+          123,
+          metadata
+        )
+      ).to.revertedWith('paused');
+    });
+    it('should success to mint when paused/unpaused', async function () {
+      const fixtures = await setupAvatarTest();
+
+      await addPauser(fixtures.adminRole, fixtures.avatar, fixtures.pauser);
+      const avatarAsPauser = await ethers.getContract(
+        'Avatar',
+        fixtures.pauser
+      );
+
+      await addMinter(fixtures.adminRole, fixtures.avatar, fixtures.minter);
+      const avatarAsMinter = await ethers.getContract(
+        'Avatar',
+        fixtures.minter
+      );
+
+      await avatarAsPauser.pause();
+      await avatarAsPauser.unpause();
+
+      // Regular mint
+      await avatarAsMinter['mint(address,uint256)'](fixtures.dest, 123);
+      expect(await fixtures.avatar.ownerOf(123)).to.be.equal(fixtures.dest);
+
+      // Mint with metadata
+      const metadata = ethers.utils.toUtf8Bytes('metadata');
+      await avatarAsMinter['mint(address,uint256,bytes)'](
+        fixtures.dest,
+        124,
+        metadata
+      );
       expect(await fixtures.avatar.ownerOf(124)).to.be.equal(fixtures.dest);
     });
   });

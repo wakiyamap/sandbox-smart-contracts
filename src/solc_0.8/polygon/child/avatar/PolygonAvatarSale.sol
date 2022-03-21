@@ -3,11 +3,11 @@
 pragma solidity 0.8.2;
 
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {Upgradeable} from "../common/BaseWithStorage/Upgradeable.sol";
 import {EIP712Upgradeable} from "@openzeppelin/contracts-upgradeable/utils/cryptography/draft-EIP712Upgradeable.sol";
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
-import {IAvatarMinter} from "../common/interfaces/IAvatarMinter.sol";
-import {ERC2771Handler} from "../common/BaseWithStorage/ERC2771Handler.sol";
+import {IAvatarMinter} from "../../../common/interfaces/IAvatarMinter.sol";
+import {Upgradeable} from "../../../common/BaseWithStorage/Upgradeable.sol";
+import {ERC2771Handler} from "../../../common/BaseWithStorage/ERC2771Handler.sol";
 import {ContextUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
 import {ECDSAUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/cryptography/ECDSAUpgradeable.sol";
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
@@ -17,7 +17,7 @@ import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/acce
 /// @title sand and send it to a whitelisted seller.
 /// @dev This contract support meta transactions.
 /// @dev This contract is final, don't inherit form it.
-contract AvatarSale is
+contract PolygonAvatarSale is
     Initializable,
     ContextUpgradeable,
     AccessControlUpgradeable,
@@ -25,12 +25,12 @@ contract AvatarSale is
     ERC2771Handler,
     Upgradeable
 {
-    event Sold(address signer, address buyer, uint256 id, address seller, uint256 price);
+    event Sold(address signer, address buyer, uint256[] ids, address seller, uint256 price);
 
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
     bytes32 public constant SELLER_ROLE = keccak256("SELLER_ROLE");
     bytes32 public constant MINT_TYPEHASH =
-        keccak256("Mint(address signer,address buyer,uint256 id,address seller,uint256 price)");
+        keccak256("Mint(address signer,address buyer,uint256[] ids,address seller,uint256 price)");
     string public constant name = "Sandbox Avatar Sale";
     string public constant version = "1.0";
     IAvatarMinter public avatarTokenAddress;
@@ -59,9 +59,9 @@ contract AvatarSale is
     /// @param s signature part
     /// @param signer the address of the signer, must be part of the signer role
     /// @param buyer the buyer of the NFT, sand is taken from him.
-    /// @param id NFT Id
+    /// @param ids NFT Ids
     /// @param seller the seller of the NFT, must be whitelisted in the seller role, sand are sent to him
-    /// @param price price in Sand of the NFT
+    /// @param price total price in Sand of the NFTs
     /// @return true if the signature is valid
     function verify(
         uint8 v,
@@ -69,11 +69,11 @@ contract AvatarSale is
         bytes32 s,
         address signer,
         address buyer,
-        uint256 id,
+        uint256[] calldata ids,
         address seller,
         uint256 price
     ) external view returns (bool) {
-        return _verify(v, r, s, signer, buyer, id, seller, price);
+        return _verify(v, r, s, signer, buyer, ids, seller, price);
     }
 
     /// @notice verifies a ERC712 signature and mint a new NFT for the buyer.
@@ -82,26 +82,28 @@ contract AvatarSale is
     /// @param s signature part
     /// @param signer the address of the signer, must be part of the signer role
     /// @param buyer the buyer of the NFT, sand is taken from him.
-    /// @param id NFT Id
+    /// @param ids NFT Ids
     /// @param seller the seller of the NFT, must be whitelisted in the seller role, sand are sent to him
-    /// @param price price in Sand of the NFT
+    /// @param price total price in Sand of the NFTs
     function execute(
         uint8 v,
         bytes32 r,
         bytes32 s,
         address signer,
         address buyer,
-        uint256 id,
+        uint256[] calldata ids,
         address seller,
         uint256 price
     ) external {
-        require(_verify(v, r, s, signer, buyer, id, seller, price), "Invalid signature");
+        require(_verify(v, r, s, signer, buyer, ids, seller, price), "Invalid signature");
         require(hasRole(SIGNER_ROLE, signer), "Invalid signer");
         require(hasRole(SELLER_ROLE, seller), "Invalid seller");
-        avatarTokenAddress.mint(buyer, id);
-        require(sandTokenAddress.transferFrom(buyer, address(this), price), "TransferFrom failed");
-        require(sandTokenAddress.transfer(seller, price), "Transfer failed");
-        emit Sold(signer, buyer, id, seller, price);
+        avatarTokenAddress.mintBatch(buyer, ids);
+        if (price != 0) {
+            require(sandTokenAddress.transferFrom(buyer, address(this), price), "TransferFrom failed");
+            require(sandTokenAddress.transfer(seller, price), "Transfer failed");
+        }
+        emit Sold(signer, buyer, ids, seller, price);
     }
 
     function domainSeparator() external view returns (bytes32) {
@@ -126,11 +128,13 @@ contract AvatarSale is
         bytes32 s,
         address signer,
         address buyer,
-        uint256 id,
+        uint256[] calldata ids,
         address seller,
         uint256 price
     ) internal view returns (bool) {
-        bytes32 digest = _hashTypedDataV4(keccak256(abi.encode(MINT_TYPEHASH, signer, buyer, id, seller, price)));
+        bytes32 idsDigest = keccak256(abi.encodePacked(ids));
+        bytes32 digest =
+            _hashTypedDataV4(keccak256(abi.encode(MINT_TYPEHASH, signer, buyer, idsDigest, seller, price)));
         address recoveredSigner = ECDSAUpgradeable.recover(digest, v, r, s);
         return recoveredSigner == signer;
     }

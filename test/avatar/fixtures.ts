@@ -4,8 +4,7 @@ import {
   getNamedAccounts,
   getUnnamedAccounts,
 } from 'hardhat';
-import {BigNumberish, Contract} from 'ethers';
-import ERC20Mock from '@openzeppelin/contracts-0.8/build/contracts/ERC20PresetMinterPauser.json';
+import {Contract} from 'ethers';
 import {withSnapshot} from '../utils';
 
 const name = 'AVATARNAME';
@@ -18,6 +17,7 @@ export const setupAvatarTest = withSnapshot([], async function () {
     trustedForwarder,
     adminRole,
     minter,
+    pauser,
     other,
     dest,
   ] = await getUnnamedAccounts();
@@ -43,101 +43,25 @@ export const setupAvatarTest = withSnapshot([], async function () {
     trustedForwarder,
     adminRole,
     minter,
+    pauser,
     other,
     dest,
   };
 });
 
-export const addMinter = async function (
+const addRole = async function (
+  roleName: string,
   adminRole: string,
   avatar: Contract,
   addr: string
 ): Promise<void> {
   const avatarAsAdmin = await ethers.getContract('Avatar', adminRole);
-  const minterRole = await avatar.MINTER_ROLE();
-  await avatarAsAdmin.grantRole(minterRole, addr);
+  const role = await avatar[roleName]();
+  await avatarAsAdmin.grantRole(role, addr);
 };
 
-export const setupAvatarSaleTest = withSnapshot([], async function () {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const {deployer, upgradeAdmin} = await getNamedAccounts();
-  const [
-    trustedForwarder,
-    adminRole,
-    seller,
-    signer,
-    other,
-    dest,
-  ] = await getUnnamedAccounts();
-  await deployments.deploy('SandMock', {
-    from: deployer,
-    contract: ERC20Mock,
-    args: ['AToken', 'SAND'],
-    proxy: false,
-  });
+export const addMinter = (adminRole: string, avatar: Contract, addr: string) =>
+  addRole('MINTER_ROLE', adminRole, avatar, addr);
 
-  await deployments.deploy('Avatar', {
-    from: deployer,
-    proxy: {
-      owner: upgradeAdmin,
-      proxyContract: 'OptimizedTransparentProxy',
-      execute: {
-        methodName: 'initialize',
-        args: [name, symbol, baseUri, trustedForwarder, adminRole],
-      },
-    },
-  });
-  const avatarAsAdmin = await ethers.getContract('Avatar', adminRole);
-  const sandToken = await ethers.getContract('SandMock', deployer);
-
-  await deployments.deploy('AvatarSale', {
-    from: deployer,
-    proxy: {
-      owner: upgradeAdmin,
-      proxyContract: 'OptimizedTransparentProxy',
-      execute: {
-        methodName: 'initialize',
-        args: [
-          avatarAsAdmin.address,
-          sandToken.address,
-          trustedForwarder,
-          adminRole,
-        ],
-      },
-    },
-  });
-  const avatarSaleAsOther = await ethers.getContract('AvatarSale', other);
-  const avatarSaleAsAdmin = await ethers.getContract('AvatarSale', adminRole);
-  // Grant roles.
-  const minter = await avatarAsAdmin.MINTER_ROLE();
-  await avatarAsAdmin.grantRole(minter, avatarSaleAsAdmin.address);
-  const signerRole = await avatarSaleAsAdmin.SIGNER_ROLE();
-  await avatarSaleAsAdmin.grantRole(signerRole, signer);
-  const sellerRole = await avatarSaleAsAdmin.SELLER_ROLE();
-  await avatarSaleAsAdmin.grantRole(sellerRole, seller);
-  return {
-    avatarSaleAsOther,
-    avatarSaleAsAdmin,
-    avatarAsAdmin,
-    sandToken,
-    deployer,
-    upgradeAdmin,
-    trustedForwarder,
-    adminRole,
-    seller,
-    signer,
-    other,
-    dest,
-  };
-});
-
-export const mintSandAndApprove = async function (
-  sandToken: Contract,
-  addr: string,
-  amount: BigNumberish,
-  spender: string
-): Promise<void> {
-  await sandToken.mint(addr, amount);
-  const sandTokenAsOther = await ethers.getContract('SandMock', addr);
-  await sandTokenAsOther.approve(spender, amount);
-};
+export const addPauser = (adminRole: string, avatar: Contract, addr: string) =>
+  addRole('PAUSE_ROLE', adminRole, avatar, addr);
