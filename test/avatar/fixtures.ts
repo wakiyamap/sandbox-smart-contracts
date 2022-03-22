@@ -60,8 +60,14 @@ const addRole = async function (
   await avatarAsAdmin.grantRole(role, addr);
 };
 
-export const addMinter = (adminRole: string, avatar: Contract, addr: string) =>
-  addRole('MINTER_ROLE', adminRole, avatar, addr);
+export const addMinter = (
+  adminRole: string,
+  avatar: Contract,
+  addr: string
+): Promise<void> => addRole('MINTER_ROLE', adminRole, avatar, addr);
 
-export const addPauser = (adminRole: string, avatar: Contract, addr: string) =>
-  addRole('PAUSE_ROLE', adminRole, avatar, addr);
+export const addPauser = (
+  adminRole: string,
+  avatar: Contract,
+  addr: string
+): Promise<void> => addRole('PAUSE_ROLE', adminRole, avatar, addr);
