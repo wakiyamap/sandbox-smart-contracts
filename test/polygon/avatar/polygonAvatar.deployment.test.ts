@@ -138,7 +138,6 @@ describe('PolygonAvatar - Avatar deployment test', function () {
         v,
         r,
         s,
-        this.l2.backendAuthWallet,
         this.buyer,
         [this.tokenId],
         this.l2.sandboxAccount,

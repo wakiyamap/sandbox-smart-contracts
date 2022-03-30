@@ -29,8 +29,7 @@ contract PolygonAvatarSale is
 
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
     bytes32 public constant SELLER_ROLE = keccak256("SELLER_ROLE");
-    bytes32 public constant MINT_TYPEHASH =
-        keccak256("Mint(address signer,address buyer,uint256[] ids,address seller,uint256 price)");
+    bytes32 public constant MINT_TYPEHASH = keccak256("Mint(address buyer,uint256[] ids,address seller,uint256 price)");
     string public constant name = "Sandbox Avatar Sale";
     string public constant version = "1.0";
     IAvatarMinter public avatarTokenAddress;
@@ -57,7 +56,6 @@ contract PolygonAvatarSale is
     /// @param v signature part
     /// @param r signature part
     /// @param s signature part
-    /// @param signer the address of the signer, must be part of the signer role
     /// @param buyer the buyer of the NFT, sand is taken from him.
     /// @param ids NFT Ids
     /// @param seller the seller of the NFT, must be whitelisted in the seller role, sand are sent to him
@@ -67,20 +65,18 @@ contract PolygonAvatarSale is
         uint8 v,
         bytes32 r,
         bytes32 s,
-        address signer,
         address buyer,
         uint256[] calldata ids,
         address seller,
         uint256 price
-    ) external view returns (bool) {
-        return _verify(v, r, s, signer, buyer, ids, seller, price);
+    ) external view returns (address) {
+        return _verify(v, r, s, buyer, ids, seller, price);
     }
 
     /// @notice verifies a ERC712 signature and mint a new NFT for the buyer.
     /// @param v signature part
     /// @param r signature part
     /// @param s signature part
-    /// @param signer the address of the signer, must be part of the signer role
     /// @param buyer the buyer of the NFT, sand is taken from him.
     /// @param ids NFT Ids
     /// @param seller the seller of the NFT, must be whitelisted in the seller role, sand are sent to him
@@ -89,15 +85,14 @@ contract PolygonAvatarSale is
         uint8 v,
         bytes32 r,
         bytes32 s,
-        address signer,
         address buyer,
         uint256[] calldata ids,
         address seller,
         uint256 price
     ) external {
-        require(_verify(v, r, s, signer, buyer, ids, seller, price), "Invalid signature");
-        require(hasRole(SIGNER_ROLE, signer), "Invalid signer");
         require(hasRole(SELLER_ROLE, seller), "Invalid seller");
+        address signer = _verify(v, r, s, buyer, ids, seller, price);
+        require(hasRole(SIGNER_ROLE, signer), "Invalid signature");
         avatarTokenAddress.mintBatch(buyer, ids);
         if (price != 0) {
             require(sandTokenAddress.transferFrom(buyer, address(this), price), "TransferFrom failed");
@@ -126,17 +121,14 @@ contract PolygonAvatarSale is
         uint8 v,
         bytes32 r,
         bytes32 s,
-        address signer,
         address buyer,
         uint256[] calldata ids,
         address seller,
         uint256 price
-    ) internal view returns (bool) {
+    ) internal view returns (address) {
         bytes32 idsDigest = keccak256(abi.encodePacked(ids));
-        bytes32 digest =
-            _hashTypedDataV4(keccak256(abi.encode(MINT_TYPEHASH, signer, buyer, idsDigest, seller, price)));
-        address recoveredSigner = ECDSAUpgradeable.recover(digest, v, r, s);
-        return recoveredSigner == signer;
+        bytes32 digest = _hashTypedDataV4(keccak256(abi.encode(MINT_TYPEHASH, buyer, idsDigest, seller, price)));
+        return ECDSAUpgradeable.recover(digest, v, r, s);
     }
 
     /**

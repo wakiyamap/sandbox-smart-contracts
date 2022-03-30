@@ -75,7 +75,6 @@ describe('AvatarSale.sol', function () {
         v,
         r,
         s,
-        fixtures.signer,
         buyer,
         [tokenId],
         fixtures.seller,
@@ -107,7 +106,6 @@ describe('AvatarSale.sol', function () {
           v,
           r,
           s,
-          fixtures.signer,
           buyer,
           [tokenId],
           fixtures.seller,
@@ -133,13 +131,12 @@ describe('AvatarSale.sol', function () {
           v,
           r,
           s,
-          fixtures.other,
           buyer,
           [tokenId],
           fixtures.seller,
           price
         )
-      ).to.be.revertedWith('Invalid signer');
+      ).to.be.revertedWith('Invalid signature');
     });
     it('should fail to mint if the seller is invalid', async function () {
       const fixtures = await setupAvatarSaleTest();
@@ -159,7 +156,6 @@ describe('AvatarSale.sol', function () {
           v,
           r,
           s,
-          fixtures.signer,
           buyer,
           [tokenId],
           fixtures.other,
@@ -203,7 +199,6 @@ describe('AvatarSale.sol', function () {
         v,
         r,
         s,
-        fixtures.signer,
         buyer,
         [tokenId],
         fixtures.seller,
@@ -264,7 +259,6 @@ describe('AvatarSale.sol', function () {
           v,
           r,
           s,
-          fixtures.signer,
           buyer,
           tokenIds,
           fixtures.seller,
@@ -311,7 +305,6 @@ describe('AvatarSale.sol', function () {
           v,
           r,
           s,
-          fixtures.signer,
           buyer,
           tokenIds,
           fixtures.seller,
@@ -348,7 +341,6 @@ describe('AvatarSale.sol', function () {
         v,
         r,
         s,
-        fixtures.signer,
         buyer,
         tokenIds,
         fixtures.seller,

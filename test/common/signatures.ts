@@ -35,7 +35,6 @@ export const avatarSaleSignature = async function (
       ],
       // Mint(address signer,address buyer,uint id,address seller,uint price)
       Mint: [
-        {name: 'signer', type: 'address'},
         {name: 'buyer', type: 'address'},
         {name: 'ids', type: 'uint256[]'},
         {name: 'seller', type: 'address'},
@@ -50,7 +49,6 @@ export const avatarSaleSignature = async function (
       verifyingContract: avatarSale.address,
     },
     message: {
-      signer: signer,
       buyer: buyer,
       ids: tokenIds.map((x) => x.toString()),
       seller: seller,
